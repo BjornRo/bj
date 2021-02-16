@@ -1,0 +1,1 @@
+#TODO implement AATree, AVL-tree, Binary heap. PSQ? Search, delete and insertion.
