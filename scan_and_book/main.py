@@ -3,21 +3,26 @@ from bs4 import BeautifulSoup
 import re
 import time
 import json
+import os
 from datetime import datetime, timedelta
 
 # time_slot: "" or "19:45-21:45"...
 time_slot = ""
 where = "Centrum"  # Sisjön, Partille
-site = ""
-sub_url = ""
-
-# Username and pass
-username = ""
-password = ""
 
 # Search every # seconds.
 search_frequency = 20
 
+# Load JSON data
+with open('data.json', 'r') as f:
+    data = json.load(f)
+
+site = data['site'][0]['main']
+sub_url = data['site'][0]['sub']
+
+# Username and pass
+username = data['login'][0]['username']
+password = "pSXNRHx6642r!zT"
 
 def main():
     global time_slot
