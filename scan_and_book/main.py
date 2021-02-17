@@ -20,7 +20,7 @@ username = data["login"]["username"]
 password = data["login"]["password"]
 
 
-#https://fysiken.nu/sv/boka?units=1133&units=1742&units=1766&locale=sv-SE
+# https://fysiken.nu/sv/boka?units=1133&units=1742&units=1766&locale=sv-SE
 
 # Functions
 def sort_and_order_bookinglist(soup: list):
@@ -39,15 +39,15 @@ def sort_and_order_bookinglist(soup: list):
 
     # Add all relevant data for each booking at each location
     for i in souplist:
+        # Check status of the booking.
+        if "inactive" in i['class']:
+            continue
+
         # Main key
         location = re.sub("\n|\r|\(|\)", "", i.find("div", class_="location").text.strip())
         time_book = re.sub(" |\n|\r", "", i.find("div", class_="time").text)
         booking_url = site + i.find("div", class_="button-holder").find("a")["href"]
         slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", i.find("div", class_="status").text))
-
-        # If slots is empty(drop in etc), then just ignore(continue the loop)
-        if not slots:
-            continue
 
         # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
         if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
@@ -93,43 +93,6 @@ def select_time(bookingslist: list):
     select_time(bookingslist)
 
 
-def main():
-    # Set to None, to make the algorithm try to automatically book the later selected time.
-    timeslot_link = None
-
-    # Flag if it hasn't booked.
-    booked = False
-
-    while not booked:
-        # Access main booking page
-        try:
-            response = requests.get(site + sub_url, timeout=10)
-        except:
-            print("Failed to connect to URL")
-            time.sleep(10)
-            continue
-
-        # Check if request getting page is successful
-        if response:
-            # Get all bookings
-            all_bookings = sort_and_order_bookinglist(BeautifulSoup(response.content, "html.parser"))
-
-            # Check if there are any available times for the day.
-            if not all_bookings:
-                print("No available times for the day")
-                break
-
-            # Select Booking
-            if not timeslot_link:
-                timeslot_link = select_time(select_location(all_bookings))
-
-            booked = True  # post_data(timeslot_link)
-
-        if not booked:
-            print("No slots")
-            time.sleep(search_frequency)
-
-
 def post_data(url_str: str):
     try:
         response = requests.get(url_str, timeout=10)
@@ -166,6 +129,43 @@ def post_data(url_str: str):
         except:
             pass
     return False
+
+
+def main():
+    # Set to None, to make the algorithm try to automatically book the later selected time.
+    timeslot_link = None
+
+    # Flag if it hasn't booked.
+    booked = False
+
+    while not booked:
+        # Access main booking page
+        try:
+            response = requests.get(site + sub_url, timeout=10)
+        except:
+            print("Failed to connect to URL")
+            time.sleep(10)
+            continue
+
+        # Check if request getting page is successful
+        if response:
+            # Get all bookings
+            all_bookings = sort_and_order_bookinglist(BeautifulSoup(response.content, "html.parser"))
+
+            # Check if there are any available times for the day.
+            if not all_bookings:
+                print("No available times for the day")
+                break
+
+            # Select Booking
+            if not timeslot_link:
+                timeslot_link = select_time(select_location(all_bookings))
+
+            booked = True  # post_data(timeslot_link)
+
+        if not booked:
+            print("No slots")
+            time.sleep(search_frequency)
 
 
 if __name__ == "__main__":
