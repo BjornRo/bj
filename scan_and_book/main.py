@@ -19,9 +19,6 @@ sub_url = data["site"]["sub"]
 username = data["login"]["username"]
 password = data["login"]["password"]
 
-
-# https://fysiken.nu/sv/boka?units=1133&units=1742&units=1766&locale=sv-SE
-
 # Functions
 def sort_and_order_bookinglist(soup: list):
     # Find the bookings
