@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 import re
 import time
 import json
-import os
 from datetime import datetime, timedelta
 
 # time_slot: "" or "19:45-21:45"...
@@ -13,16 +12,64 @@ where = "Centrum"  # Sisjön, Partille
 # Search every # seconds.
 search_frequency = 20
 
+
 # Load JSON data
-with open('data.json', 'r') as f:
+with open("data.json", "r") as f:
     data = json.load(f)
 
-site = data['site'][0]['main']
-sub_url = data['site'][0]['sub']
+site = data["site"]["main"]
+sub_url = data["site"]["sub"]
 
 # Username and pass
-username = data['login'][0]['username']
-password = "pSXNRHx6642r!zT"
+username = data["login"]["username"]
+password = data["login"]["password"]
+
+# Functions
+def sort_and_order_bookinglist(soup: list):
+    # Find the bookings
+    souplist = soup.find("li", class_="day active").find_all("li")
+    # Pop the first element since it doesn't contain any valuable info.
+    souplist.pop(0)
+
+    # Empty dict
+    booking_list = {}
+
+    # Add all relevant data for each booking at each location
+    for i in souplist:
+        # Main key
+        location = re.sub("\n|\r|\(|\)", "", i.find("div", class_="location").text.strip())
+        time_activity = re.sub(" |\n|\r", "", i.find("div", class_="time").text)
+        booking_url = site + i.find("a")["href"]
+        slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", i.find("div", class_="status").text))
+
+        # If slots is empty, then just ignore(continue the loop)
+        if not slots:
+            continue
+
+        # If current location doesn't exist, add an empty dict
+        if not booking_list.get(location):
+            booking_list[location] = {}
+
+        # Add time as key, then bookingurl and slots in a tuple
+        booking_list[location][time_activity] = (booking_url, slots.group(1))
+    return booking_list
+
+
+def select_booking_input(bookingslist: list):
+    # If there are no more times, return current time.
+    if not bookingslist:
+        return datetime.now().strftime("%H:%M")
+    print("Select your time:")
+    for i, elem in enumerate(bookingslist):
+        btime = re.sub(" |\n|\r", "", elem.find("div", class_="time").text)
+        bslots = re.search(":([0-9]+|>[0-9]+)", re.sub(" |\n|\r", "", elem.find("div", class_="status").text))
+        print(f"  {i}: {btime}, slots: {bslots.group(1)}")
+    user_in = input()
+    if user_in.isdigit() and (0 <= int(user_in) < len(bookingslist)):
+        return re.sub(" |\n|\r", "", bookingslist[int(user_in)].find("div", class_="time").text)
+    print("Enter a valid input!")
+    print_times_and_get_user_input(bookingslist)
+
 
 def main():
     global time_slot
@@ -31,6 +78,7 @@ def main():
     booked = False
 
     while not booked:
+        # Access main booking page
         try:
             response = requests.get(site + sub_url, timeout=10)
         except:
@@ -41,20 +89,17 @@ def main():
         # Check if request getting page is successful
         if response:
             # Get all bookings
-            bookings = clean_bookinglist(BeautifulSoup(response.content, "html.parser"), where)
-
-            # Set response to None to discard the data.
-            response = None
+            all_bookings = sort_and_order_bookinglist(BeautifulSoup(response.content, "html.parser"))
 
             # Check if there are any available times for the day.
-            if not bookings:
+            if not all_bookings:
                 print("No available times for the day")
                 break
 
             # If there is no specified time_slot, print and let user choose.
             # Also check if the timeslot is valid
             if not time_slot:
-                time_slot = print_times_and_get_user_input(bookings)
+                time_slot = select_booking_input(all_bookings)
             else:
                 for i in bookings:
                     if time_slot in i.text.replace(" ", ""):
@@ -80,37 +125,6 @@ def main():
         if not booked:
             print("No slots")
             time.sleep(search_frequency)
-
-
-def print_times_and_get_user_input(bookingslist: list):
-    # If there are no more times, return current time.
-    if not bookingslist:
-        return datetime.now().strftime("%H:%M")
-    print("Select your time:")
-    for i, elem in enumerate(bookingslist):
-        btime = re.sub(" |\n|\r", "", elem.find("div", class_="time").text)
-        bslots = re.search(":([0-9]+|>[0-9]+)", re.sub(" |\n|\r", "", elem.find("div", class_="status").text))
-        print(f"  {i}: {btime}, slots: {bslots.group(1)}")
-    user_in = input()
-    if user_in.isdigit() and (0 <= int(user_in) < len(bookingslist)):
-        return re.sub(" |\n|\r", "", bookingslist[int(user_in)].find("div", class_="time").text)
-    print("Enter a valid input!")
-    print_times_and_get_user_input(bookingslist)
-
-
-def clean_bookinglist(soup: list, location: str):
-    souplist = soup.find("li", class_="day active").find_all("li")
-    # Pop the first element since it doesn't contain any valuable info.
-    souplist.pop(0)
-
-    # Remove unavailable times and times in locations thats not relevant.
-    while souplist:
-        if "inactive" in souplist[0]["class"] or location not in souplist[0].text:
-            # Remove inactive time
-            souplist.pop(0)
-        else:
-            break
-    return souplist
 
 
 # Gets the link for the timeslot
