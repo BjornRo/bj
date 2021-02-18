@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 
 # Search every # seconds.
 search_frequency = 20
-
 # Load JSON data
 with open("data.json", "r") as f:
     data = json.load(f)
 
 site = data["site"]["main"]
 sub_url = data["site"]["sub"]
+#cookies = data['cookies']['first']
 
 # Username and pass
 username = data["login"]["username"]
