@@ -1,10 +1,26 @@
+"""
+This was more of a fun project since I really disliked the company booking-site. Messy old code with hidden elements which
+wasn't really hidden since data was just under layers of 'design'...
+
+Maybe someone can find inspiration or something. May not be usable for anything other than just for this company.
+
+Tried to implement what I've learnt from Computer Science courses so far.
+
+* Functional decomposition
+* Finite automata (Regular expressions)
+* Very light "database"... few rows of JSON.
+* Some algorithms
+* Recursion on the user input! :D Wish Python had more haskell-like style though...
+* Programming IS Math: f(g(h(x)))
+"""
+
+
 import requests
 from bs4 import BeautifulSoup
 import re
 import time
 import json
 from datetime import datetime, timedelta
-
 
 # Search every # seconds.
 search_frequency = 20
@@ -17,6 +33,7 @@ day = (datetime.today().isocalendar()[2] - 1) % 6
 with open("data.json", "r") as f:
     data = json.load(f)
 
+# Links - url
 main_url = data["site"]["main_url"]
 bookings_url = data["site"]["bookings_url"]
 
@@ -25,7 +42,6 @@ queries = (
     data["site"]["query"].format(year, week),
     data["site"]["query"].format(year, (week % datetime(year, 12, 31).isocalendar()[1]) + 1),
 )
-# cookies = data['cookies']['first']
 
 # Username and pass
 username = data["login"]["username"]
@@ -74,9 +90,9 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
     return booking_list
 
 
-def get_user_input(max_value):
+def get_user_input(max_value: int):
     user_input = input()
-    if user_input.isdigit() and (0 <= int(user_input) < max_value):
+    if user_input.isdigit() and (0 <= int(user_input) < int(max_value)):
         return int(user_input)
     print("Enter a valid input!")
     return get_user_input(max_value)
