@@ -1,6 +1,6 @@
 """
-This was more of a fun project since I really disliked the company booking-site. Messy old code with hidden elements which
-wasn't really hidden since data was just under layers of 'design'...
+This was more of a fun project since I really disliked the company booking-site(I'm just a casual user, not an employee).
+Messy old code with hidden elements which wasn't really hidden since data was just under layers of 'design'...
 
 Maybe someone can find inspiration or something. May not be usable for anything other than just for this company.
 
