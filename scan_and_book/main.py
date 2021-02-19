@@ -5,58 +5,81 @@ import time
 import json
 from datetime import datetime, timedelta
 
+
 # Search every # seconds.
 search_frequency = 20
+
+# Date related
+year, week, _ = datetime.today().isocalendar()
+day = (datetime.today().isocalendar()[2] - 1) % 6
+
 # Load JSON data
 with open("data.json", "r") as f:
     data = json.load(f)
 
-site = data["site"]["main"]
-sub_url = data["site"]["sub"]
-#cookies = data['cookies']['first']
+main_url = data["site"]["main_url"]
+bookings_url = data["site"]["bookings_url"]
+
+# Week, Week+1
+queries = (
+    data["site"]["query"].format(year, week),
+    data["site"]["query"].format(year, (week % datetime(year, 12, 31).isocalendar()[1]) + 1),
+)
+# cookies = data['cookies']['first']
 
 # Username and pass
 username = data["login"]["username"]
 password = data["login"]["password"]
 
 # Functions
-def sort_and_order_bookinglist(soup: list):
-    # Find the bookings
-    souplist = soup.find("li", class_="day active").find_all("li")
-    # Pop the first element since it doesn't contain any valuable info.
-    souplist.pop(0)
-
-    # Empty dict
-    booking_list = {}
+def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 
     # Time related, to sort out unavailable times.
     tf = "%H:%M"
     tb = "[0-9]+:[0-9]+"
     time_now = datetime.strptime(datetime.now().strftime(tf), tf)
 
-    # Add all relevant data for each booking at each location
-    for i in souplist:
-        # Check status of the booking.
-        if "inactive" in i['class']:
-            continue
+    # Empty dict. Can be in for loop due to python scope. C-like programmers would be confused though...
+    booking_list = {}
 
-        # Main key
-        location = re.sub("\n|\r|\(|\)", "", i.find("div", class_="location").text.strip())
-        time_book = re.sub(" |\n|\r", "", i.find("div", class_="time").text)
-        booking_url = site + i.find("div", class_="button-holder").find("a")["href"]
-        slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", i.find("div", class_="status").text))
+    # Add all relevant data for each booking at each location.
+    # For loop looks like going i out of array but if sunday, next week is added...
+    for i in range(day, day + 2):
+        bookday_list = unsorted_bookings[i].find_all("li")
 
-        # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-        if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
-            continue
+        # Pop uncessecary header
+        bookday_list.pop(0)
 
-        # If current location doesn't exist, add an empty dict
-        if not booking_list.get(location):
-            booking_list[location] = {}
+        for j in bookday_list:
+            # Check status of the booking activity. OR If there is a message then you can't book
+            if "inactive" in j["class"] or j.find("span", class_="message"):
+                continue
 
-        # Add time as key, then bookingurl and slots in a tuple
-        booking_list[location][time_book] = (booking_url, slots[1])
+            # Main key
+            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
+            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
+            booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+            slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
+
+            # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
+            if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
+                continue
+
+            # If current location doesn't exist, add an empty dict
+            if not booking_list.get(location):
+                booking_list[location] = {}
+
+            # Add time as key, then bookingurl and slots in a tuple
+            booking_list[location][time_book] = (booking_url, slots[1])
     return booking_list
+
+
+def get_user_input(max_value):
+    user_input = input()
+    if user_input.isdigit() and (0 <= int(user_input) < max_value):
+        return int(user_input)
+    print("Enter a valid input!")
+    return get_user_input(max_value)
 
 
 def select_location(bookingslist: list):
@@ -67,13 +90,7 @@ def select_location(bookingslist: list):
     print("Select location:")
     for i, elem in enumerate(loc_keys):
         print(f"  {i}: {elem}")
-
-    # Get user input and check if it's valid
-    user_in = input()
-    if user_in.isdigit() and (0 <= int(user_in) < len(bookingslist)):
-        return bookingslist[loc_keys[int(user_in)]]
-    print("Enter a valid input!")
-    select_location(bookingslist)
+    return bookingslist[loc_keys[get_user_input(len(loc_keys))]]
 
 
 def select_time(bookingslist: list):
@@ -83,14 +100,10 @@ def select_time(bookingslist: list):
     print("Select your time:")
     for i, elem in enumerate(time_keys):
         print(f"  {i}: {time_keys[i]}, slots: {bookingslist[elem][1]}")
-    user_in = input()
-    if user_in.isdigit() and (0 <= int(user_in) < len(bookingslist)):
-        return bookingslist[time_keys[int(user_in)]][0]
-    print("Enter a valid input!")
-    select_time(bookingslist)
+    return bookingslist[time_keys[get_user_input(len(bookingslist))]][0]
 
 
-def post_data(url_str: str):
+def post_data(main_site, url_str: str):
     try:
         response = requests.get(url_str, timeout=10)
     except:
@@ -117,15 +130,31 @@ def post_data(url_str: str):
 
         # Send data
         try:
-            sent = requests.post(site + soup_response["action"], data=payload)
+            sent = requests.post(main_site + soup_response["action"], data=payload)
             if sent:
                 # Check if the post returned error. If no error, then the statement evaluates as None.
                 if not BeautifulSoup(sent.content, "html.parser").find("form").find("p", class_="error"):
                     print("Successfully Booked")
                     return True
+                else:
+                    print("Error: Failed to book")
         except:
             pass
     return False
+
+
+def get_bookings(day, query1, query2):
+    # Access booking pages
+    prsr = "html.parser"
+    try:
+        bookings = BeautifulSoup(requests.get(query1, timeout=10).content, prsr).find_all("li", class_="day")
+        if day == 6:
+            bookings.append(BeautifulSoup(requests.get(query2, timeout=10).content, prsr).find_all("li", class_="day"))
+        return bookings
+    except:
+        print("Failed to connect to URL")
+        time.sleep(10)
+        return None
 
 
 def main():
@@ -136,18 +165,11 @@ def main():
     booked = False
 
     while not booked:
-        # Access main booking page
-        try:
-            response = requests.get(site + sub_url, timeout=10)
-        except:
-            print("Failed to connect to URL")
-            time.sleep(10)
-            continue
-
+        unsorted_bookings = get_bookings(day, bookings_url + queries[0], bookings_url + queries[1])
         # Check if request getting page is successful
-        if response:
-            # Get all bookings
-            all_bookings = sort_and_order_bookinglist(BeautifulSoup(response.content, "html.parser"))
+        if unsorted_bookings:
+            # Get all bookings, today and tomorrow
+            all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
 
             # Check if there are any available times for the day.
             if not all_bookings:
@@ -158,10 +180,10 @@ def main():
             if not timeslot_link:
                 timeslot_link = select_time(select_location(all_bookings))
 
-            booked = True  # post_data(timeslot_link)
+            booked = post_data(main_url, timeslot_link)
 
         if not booked:
-            print("No slots")
+            print(f"Retrying after {search_frequency} seconds...")
             time.sleep(search_frequency)
 
 

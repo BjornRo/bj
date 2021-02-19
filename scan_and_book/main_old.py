@@ -1,22 +1,26 @@
-from requests_html import HTMLSession
+import requests
 from bs4 import BeautifulSoup
 import re
 import time
 import json
 from datetime import datetime, timedelta
 
-requests = HTMLSession()
+
+################
+##TODO
+
+## ROW 168 IS SET TO TRUE. WONT TRY TO BOOK
+
+
 
 # Search every # seconds.
 search_frequency = 20
-
 # Load JSON data
 with open("data.json", "r") as f:
     data = json.load(f)
 
 site = data["site"]["main"]
 sub_url = data["site"]["sub"]
-cookies = data['cookies']['first']
 
 # Username and pass
 username = data["login"]["username"]
