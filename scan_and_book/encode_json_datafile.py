@@ -8,12 +8,13 @@ data['login'] = {
 }
 
 data['site'] = {
-    'main': 'https://website.c',
-    'sub': '/sub/'
+    'main_url': '',
+    'bookings_url': '',
+    'query': "?value1=&value2="
 }
 
 data['cookies'] = {
-    'first': 'data'
+    'first': ''
 }
 
 with open('data.json', 'w') as f:
