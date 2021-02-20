@@ -92,8 +92,8 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 
 def get_user_input(max_value: int):
     user_input = input()
-    if user_input.isdigit() and (0 <= int(user_input) < int(max_value)):
-        return int(user_input)
+    if user_input.isdigit() and (1 <= int(user_input) <= int(max_value)):
+        return int(user_input) - 1
     print("Enter a valid input!")
     return get_user_input(max_value)
 
@@ -105,8 +105,8 @@ def select_location(bookingslist: list):
     # Print all locations
     print("Select location:")
     for i, elem in enumerate(loc_keys):
-        print(f"  {i}: {elem}")
-    return bookingslist[loc_keys[get_user_input(len(loc_keys))]]
+        print(f"  {i+1}: {elem}")
+    return loc_keys[get_user_input(len(loc_keys))]
 
 
 def select_time(bookingslist: list):
@@ -115,11 +115,12 @@ def select_time(bookingslist: list):
 
     print("Select your time:")
     for i, elem in enumerate(time_keys):
-        print(f"  {i}: {time_keys[i]}, slots: {bookingslist[elem][1]}")
-    return bookingslist[time_keys[get_user_input(len(bookingslist))]][0]
+        print(f"  {i+1}: {time_keys[i]}, slots: {bookingslist[elem][1]}")
+    time_key = time_keys[get_user_input(len(bookingslist))]
+    return time_key
 
 
-def post_data(main_site, url_str: str):
+def post_data(main_url, url_str: str):
     try:
         response = requests.get(url_str, timeout=10)
     except:
@@ -146,14 +147,20 @@ def post_data(main_site, url_str: str):
 
         # Send data
         try:
-            sent = requests.post(main_site + soup_response["action"], data=payload)
+            sent = requests.post(main_url + soup_response["action"], data=payload)
             if sent:
+                booking_status_soup = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
                 # Check if the post returned error. If no error, then the statement evaluates as None.
-                if not BeautifulSoup(sent.content, "html.parser").find("form").find("p", class_="error"):
+                if not booking_status_soup:
                     print("Successfully Booked")
                     return True
                 else:
-                    print("Error: Failed to book")
+                    error_code = re.sub(" |\r|\n", "", booking_status_soup.text)
+                    if re.match(".+?maxantalbokningar", error_code):
+                        print("Error: Already booked - Task failed successfully")
+                        return True
+                    else:
+                        print("Error: Failed to book")
         except:
             pass
     return False
@@ -175,7 +182,7 @@ def get_bookings(day, query1, query2):
 
 def main():
     # Set to None, to make the algorithm try to automatically book the later selected time.
-    timeslot_link = None
+    timeslot = None
 
     # Flag if it hasn't booked.
     booked = False
@@ -193,10 +200,22 @@ def main():
                 break
 
             # Select Booking
-            if not timeslot_link:
-                timeslot_link = select_time(select_location(all_bookings))
+            if not timeslot:
+                location = select_location(all_bookings)
+                timeslot = (location, select_time(all_bookings.get(location)))
+                location = None
 
-            booked = post_data(main_url, timeslot_link)
+            # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
+            timeslot_data = all_bookings.get(timeslot[0]).get(timeslot[1])
+
+            if timeslot_data:
+                if timeslot_data[1] == "0":
+                    print("Selected location and time is full")
+                else:
+                    booked = post_data(main_url, timeslot_data[0])
+            else:
+                print("Selected location and time is unavailable, stopping")
+                return
 
         if not booked:
             print(f"Retrying after {search_frequency} seconds...")
