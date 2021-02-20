@@ -14,7 +14,6 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Programming IS Math: f(g(h(x)))
 """
 
-
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -27,7 +26,7 @@ search_frequency = 20
 
 # Date related
 year, week, _ = datetime.today().isocalendar()
-day = (datetime.today().isocalendar()[2] - 1) % 6
+day = datetime.today().isocalendar()[2] - 1
 
 # Load JSON data
 with open("data.json", "r") as f:
@@ -172,7 +171,7 @@ def get_bookings(day, query1, query2):
     try:
         bookings = BeautifulSoup(requests.get(query1, timeout=10).content, prsr).find_all("li", class_="day")
         if day == 6:
-            bookings.append(BeautifulSoup(requests.get(query2, timeout=10).content, prsr).find_all("li", class_="day"))
+            bookings += BeautifulSoup(requests.get(query2, timeout=10).content, prsr).find_all("li", class_="day")
         return bookings
     except:
         print("Failed to connect to URL")
