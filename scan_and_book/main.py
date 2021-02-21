@@ -27,6 +27,7 @@ search_frequency = 20
 # Date related
 year, week, _ = datetime.today().isocalendar()
 day = datetime.today().isocalendar()[2] - 1
+days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
 
 # Load JSON data
 with open("data.json", "r") as f:
@@ -47,7 +48,7 @@ username = data["login"]["username"]
 password = data["login"]["password"]
 
 # Functions
-def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
+def sort_and_order_bookinglist(main_url, day, days, unsorted_bookings: list):
 
     # Time related, to sort out unavailable times.
     tf = "%H:%M"
@@ -85,7 +86,7 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
                 booking_list[location] = {}
 
             # Add time as key, then bookingurl and slots in a tuple
-            booking_list[location][time_book] = (booking_url, slots[1])
+            booking_list[location][time_book] = (booking_url, slots[1], days.get(i % 7))
     return booking_list
 
 
@@ -93,9 +94,9 @@ def get_user_input(max_value: int):
     user_input = input()
     if user_input.isdigit():
         user_input = int(user_input)
-        if (1 <= user_input <= int(max_value)):
+        if 1 <= user_input <= int(max_value):
             return user_input - 1
-        elif (user_input == 0):
+        elif user_input == 0:
             return None
     print("Enter a valid input!")
     return get_user_input(max_value)
@@ -104,6 +105,7 @@ def get_user_input(max_value: int):
 def select_location(bookingslist: list):
     # Key for location
     loc_keys = list(bookingslist)
+    list.sort(loc_keys)
 
     # Print all locations
     print("Select location:")
@@ -111,7 +113,7 @@ def select_location(bookingslist: list):
     for i, elem in enumerate(loc_keys):
         print(f"  {i+1}: {elem}")
     user_input = get_user_input(len(bookingslist))
-    if user_input == None:
+    if user_input is None:
         return None
     else:
         return loc_keys[user_input]
@@ -124,9 +126,10 @@ def select_time(bookingslist: list):
     print("Select your time:")
     print("  0: Select location")
     for i, elem in enumerate(time_keys):
-        print(f"  {i+1}: {time_keys[i]}, slots: {bookingslist.get(elem)[1]}")
+        slot_elem = bookingslist.get(elem)
+        print(f"  {i+1}: {slot_elem[2]}, {time_keys[i]}, slots: {slot_elem[1]}")
     user_input = get_user_input(len(bookingslist))
-    if user_input == None:
+    if user_input is None:
         return None
     else:
         return time_keys[user_input]
@@ -134,7 +137,7 @@ def select_time(bookingslist: list):
 
 def post_data(main_url, url_str: str):
     try:
-        response = requests.get(url_str, timeout=10)
+        response = requests.get(url_str, timeout=15)
     except:
         print("Failed to get booking link")
         return False
@@ -205,7 +208,7 @@ def main():
         # Check if request getting page is successful
         if unsorted_bookings:
             # Get all bookings, today and tomorrow
-            all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
+            all_bookings = sort_and_order_bookinglist(main_url, day, days, unsorted_bookings)
 
             # Check if there are any available times for the day.
             if not all_bookings:
@@ -215,10 +218,10 @@ def main():
             # Select Booking
             while not timeslot:
                 location = select_location(all_bookings)
-                if location == None:
+                if location is None:
                     return
                 timeslot = (location, select_time(all_bookings.get(location)))
-                if timeslot[1] == None:
+                if timeslot[1] is None:
                     timeslot = None
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
