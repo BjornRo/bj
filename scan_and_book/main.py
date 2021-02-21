@@ -91,8 +91,12 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 
 def get_user_input(max_value: int):
     user_input = input()
-    if user_input.isdigit() and (1 <= int(user_input) <= int(max_value)):
-        return int(user_input) - 1
+    if user_input.isdigit():
+        user_input = int(user_input)
+        if (1 <= user_input <= int(max_value)):
+            return user_input - 1
+        elif (user_input == 0):
+            return None
     print("Enter a valid input!")
     return get_user_input(max_value)
 
@@ -103,9 +107,14 @@ def select_location(bookingslist: list):
 
     # Print all locations
     print("Select location:")
+    print("  0: Exit")
     for i, elem in enumerate(loc_keys):
         print(f"  {i+1}: {elem}")
-    return loc_keys[get_user_input(len(loc_keys))]
+    user_input = get_user_input(len(bookingslist))
+    if user_input == None:
+        return None
+    else:
+        return loc_keys[user_input]
 
 
 def select_time(bookingslist: list):
@@ -113,10 +122,14 @@ def select_time(bookingslist: list):
     time_keys = list(bookingslist)
 
     print("Select your time:")
+    print("  0: Select location")
     for i, elem in enumerate(time_keys):
-        print(f"  {i+1}: {time_keys[i]}, slots: {bookingslist[elem][1]}")
-    time_key = time_keys[get_user_input(len(bookingslist))]
-    return time_key
+        print(f"  {i+1}: {time_keys[i]}, slots: {bookingslist.get(elem)[1]}")
+    user_input = get_user_input(len(bookingslist))
+    if user_input == None:
+        return None
+    else:
+        return time_keys[user_input]
 
 
 def post_data(main_url, url_str: str):
@@ -182,6 +195,7 @@ def get_bookings(day, query1, query2):
 def main():
     # Set to None, to make the algorithm try to automatically book the later selected time.
     timeslot = None
+    location = None
 
     # Flag if it hasn't booked.
     booked = False
@@ -199,17 +213,20 @@ def main():
                 break
 
             # Select Booking
-            if not timeslot:
+            while not timeslot:
                 location = select_location(all_bookings)
+                if location == None:
+                    return
                 timeslot = (location, select_time(all_bookings.get(location)))
-                location = None
+                if timeslot[1] == None:
+                    timeslot = None
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
             timeslot_data = all_bookings.get(timeslot[0]).get(timeslot[1])
 
             if timeslot_data:
                 if timeslot_data[1] == "0":
-                    print("Selected location and time is full")
+                    print("No slots available...")
                 else:
                     booked = post_data(main_url, timeslot_data[0])
             else:
