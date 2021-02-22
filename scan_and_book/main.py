@@ -184,22 +184,24 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
             if "inactive" in j["class"]:
                 continue
 
-            # Main keys
-            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
-
-            #Get booking url
+            # Get booking url
             booking_url = None
-            #If there is no message, then there exist a link. Add the link.
+            # If there is no message, then there exist a link. Add the link.
             if not j.find("span", class_="message"):
                 booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+            elif re.match("dropin", j.find("span", class_="message").text.replace(" ", "").lower()):
+                continue
 
-            # Get number of slots
+            # Get "number" of slots
             slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
 
             # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
             if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
                 continue
+
+            # Main keys
+            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
+            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
 
             # If current location doesn't exist, and day, add an empty dict
             if not booking_list.get(location):
@@ -229,7 +231,7 @@ def main():
             all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
 
             # Check if there are any available times for the day.
-            #if not all_bookings:
+            # if not all_bookings:
             #    print("No available times for the day")
             #    return
 
@@ -264,10 +266,10 @@ def main():
             else:
                 booked = post_data(main_url, timeslot_data[0])
 
-
         if not booked:
             print(f"Retrying after {search_frequency} seconds...")
             time.sleep(search_frequency)
+
 
 if __name__ == "__main__":
     main()
