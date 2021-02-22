@@ -22,7 +22,7 @@ import json
 from datetime import datetime, timedelta
 
 # Search every # seconds.
-search_frequency = 20
+search_frequency = 120
 
 # Date related
 year, week, _ = datetime.today().isocalendar()
@@ -124,7 +124,8 @@ def select_location(bookingslist: list):
         return loc_keys[user_input]
 
 
-def select_day_time(bookingslist: list, days):
+def select_day_time(all_bookings: list, location, days):
+    bookingslist = all_bookings.get(location)
     # Manipulate data to get day_key into a list of elements.
     # ie {days: {time: (booking_slot)}}: [(day, 'time'),...]
     all_timeslots = []
@@ -132,7 +133,7 @@ def select_day_time(bookingslist: list, days):
         for j in bookingslist.get(i):
             all_timeslots.append((i, j))
 
-    print("Select your time:")
+    print(f"Select your time for {location}:")
     print("  0: Return to select location")
     for i, (d, t) in enumerate(all_timeslots):
         to_print = f"  {i+1}: {days.get(d)}, {t}, slots: "
@@ -240,7 +241,7 @@ def main():
                 location = select_location(all_bookings)
                 if location is None:
                     return
-                timeslot = select_day_time(all_bookings.get(location), days)
+                timeslot = select_day_time(all_bookings, location, days)
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
             # timeslot = (day, selected_time)
