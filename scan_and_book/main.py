@@ -206,9 +206,9 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 
             # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
             if (
-                slots[1] == "0"
+                i == day
+                and slots[1] == "0"
                 and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2)
-                and i == day
             ):
                 continue
 
