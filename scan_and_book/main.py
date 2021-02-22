@@ -173,9 +173,6 @@ def get_bookings(day, query1, query2):
 
 # Returns {location: {day: {time: (link, slots)}}}
 def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
-    # Time related, to sort out unavailable times.
-    time_now = datetime.strptime(datetime.now().strftime(tf), tf)
-
     # Empty dict. Can be in for loop due to python scope. C-like lang programmers would be confused though...
     booking_list = {}
 
@@ -208,7 +205,11 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
             if (
                 i == day
                 and slots[1] == "0"
-                and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2)
+                and (
+                    datetime.strptime(re.search(tb, time_book)[0], tf)
+                    - datetime.strptime(datetime.now().strftime(tf), tf)
+                )
+                <= timedelta(hours=2)
             ):
                 continue
 
@@ -244,11 +245,6 @@ def main():
         if unsorted_bookings:
             # Get all bookings, today and tomorrow
             all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
-
-            # Check if there are any available times for the day.
-            # if not all_bookings:
-            #    print("No available times for the day")
-            #    return
 
             # Select Booking slot
             while not timeslot:
