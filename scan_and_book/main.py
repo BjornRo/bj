@@ -18,11 +18,12 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import time
+import sys
 import json
 from datetime import datetime, timedelta
 
 # Search every # seconds.
-search_frequency = 120
+search_frequency = 60
 
 # Date related
 year, week, _ = datetime.today().isocalendar()
@@ -221,6 +222,8 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 
 
 def main():
+    # If it is going to search for a slot, then count number of attempts.
+    attempts = 0
     # Set to None, to make the algorithm try to automatically book the later selected time.
     timeslot = None
     location = None
@@ -272,8 +275,13 @@ def main():
                 booked = post_data(main_url, timeslot_data[0])
 
         if not booked:
-            print(f"Retrying after {search_frequency} seconds...")
-            time.sleep(search_frequency)
+            attempts += 1
+            for i in range(search_frequency, 0, -1):
+                sys.stdout.write("\r")
+                sys.stdout.write(f"Retry to book, attempts: {attempts}, {i} seconds remaining.")
+                sys.stdout.flush()
+                time.sleep(1)
+            print("")
 
 
 if __name__ == "__main__":
