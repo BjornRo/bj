@@ -19,7 +19,6 @@ from bs4 import BeautifulSoup
 import re
 import time
 import json
-import threading
 from datetime import datetime, timedelta
 
 # Search every # seconds.
@@ -230,9 +229,9 @@ def main():
             all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
 
             # Check if there are any available times for the day.
-            if not all_bookings:
-                print("No available times for the day")
-                return
+            #if not all_bookings:
+            #    print("No available times for the day")
+            #    return
 
             # Select Booking slot
             while not timeslot:
@@ -244,28 +243,30 @@ def main():
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
             # timeslot = (day, selected_time)
             # timeslot_data = (link = (None | Str), slots)
-            timeslot_data = all_bookings.get(location).get(timeslot[0]).get(timeslot[1])
+            try:
+                timeslot_data = all_bookings.get(location).get(timeslot[0]).get(timeslot[1])
+            except:
+                print("Selected location and time is unavailable, stopping")
+                return
 
             # If Link is None, then wait until there are less or equal to 24h to that slot.
+            # Then continue to query the booking again also to get a link.
             if not timeslot_data[0]:
                 slot_time = datetime.strptime(re.match(tb, timeslot[1])[0], tf)
                 time_now = datetime.strptime(datetime.now().strftime(tf), tf)
                 sleep_time = int((slot_time - time_now).total_seconds()) + 20
-                
+                time.sleep(sleep_time)
+                continue
 
-            if timeslot_data:
-                if timeslot_data[1] == "0":
-                    print("No slots available...")
-                else:
-                    booked = post_data(main_url, timeslot_data[0])
+            if timeslot_data[1] == "0":
+                print("No slots available...")
             else:
-                print("Selected location and time is unavailable, stopping")
-                return
+                booked = True#post_data(main_url, timeslot_data[0])
+
 
         if not booked:
             print(f"Retrying after {search_frequency} seconds...")
             time.sleep(search_frequency)
-
 
 if __name__ == "__main__":
     main()
