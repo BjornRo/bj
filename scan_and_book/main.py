@@ -257,7 +257,7 @@ def main():
                 slot_time = datetime.strptime(re.match(tb, timeslot[1])[0], tf)
                 time_now = datetime.strptime(datetime.now().strftime(tf), tf)
                 sleep_time = int((slot_time - time_now).total_seconds()) + 20
-                print(f" Sleeping for {sleep_time} seconds to try to book later...")
+                print(f"Sleeping for {sleep_time} seconds to try to book later...")
                 time.sleep(sleep_time)
                 continue
 
