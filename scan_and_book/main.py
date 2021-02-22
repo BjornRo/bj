@@ -103,7 +103,7 @@ def post_data(main_url, url_str: str):
                     else:
                         print("Error: Failed to book")
         except:
-            pass
+            print("Error: Failed to send data")
     return False
 
 
