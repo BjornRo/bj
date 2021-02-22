@@ -281,7 +281,9 @@ def main():
                 sys.stdout.write(f"Retry to book, attempts: {attempts}, {i} seconds remaining.")
                 sys.stdout.flush()
                 time.sleep(1)
-            print("")
+            sys.stdout.write("\r\n")
+            sys.stdout.flush()
+
 
 
 if __name__ == "__main__":
