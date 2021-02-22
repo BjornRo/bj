@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 import json
+import threading
 from datetime import datetime, timedelta
 
 # Search every # seconds.
@@ -28,6 +29,7 @@ search_frequency = 20
 year, week, _ = datetime.today().isocalendar()
 day = datetime.today().isocalendar()[2] - 1
 days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+tf, tb = "%H:%M", "[0-9]+:[0-9]+"
 
 # Load JSON data
 with open("data.json", "r") as f:
@@ -134,7 +136,12 @@ def select_day_time(bookingslist: list, days):
     print("Select your time:")
     print("  0: Return to select location")
     for i, (d, t) in enumerate(all_timeslots):
-        print(f"  {i+1}: {days.get(d)}, {t}, slots: {bookingslist.get(d).get(t)[1]}")
+        to_print = f"  {i+1}: {days.get(d)}, {t}, slots: "
+        if bookingslist.get(d).get(t)[0]:
+            to_print += bookingslist.get(d).get(t)[1]
+        else:
+            to_print += "not unlocked"
+        print(to_print)
 
     user_input = get_user_input(len(all_timeslots))
     if user_input is None:
@@ -159,7 +166,6 @@ def get_bookings(day, query1, query2):
 # Returns {location: {day: {time: (link, slots)}}}
 def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
     # Time related, to sort out unavailable times.
-    tf, tb = "%H:%M", "[0-9]+:[0-9]+"
     time_now = datetime.strptime(datetime.now().strftime(tf), tf)
 
     # Empty dict. Can be in for loop due to python scope. C-like lang programmers would be confused though...
@@ -211,6 +217,7 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 def main():
     # Set to None, to make the algorithm try to automatically book the later selected time.
     timeslot = None
+    location = None
 
     # Flag if it hasn't booked.
     booked = False
@@ -221,25 +228,30 @@ def main():
         if unsorted_bookings:
             # Get all bookings, today and tomorrow
             all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
-            #all_bookings.get('Klätterlabbet Centrum').get(1)
 
             # Check if there are any available times for the day.
             if not all_bookings:
                 print("No available times for the day")
-                break
+                return
 
-            # Select Booking
+            # Select Booking slot
             while not timeslot:
                 location = select_location(all_bookings)
                 if location is None:
                     return
-                day, time_ = select_day_time(all_bookings.get(location), days)
-                if timeslot[1] is None:
-                    timeslot = None
+                timeslot = select_day_time(all_bookings.get(location), days)
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
-            # timeslot = (location, day, selected_time)
-            timeslot_data = all_bookings.get(timeslot[0]).get(timeslot[1])
+            # timeslot = (day, selected_time)
+            # timeslot_data = (link = (None | Str), slots)
+            timeslot_data = all_bookings.get(location).get(timeslot[0]).get(timeslot[1])
+
+            # If Link is None, then wait until there are less or equal to 24h to that slot.
+            if not timeslot_data[0]:
+                slot_time = datetime.strptime(re.match(tb, timeslot[1])[0], tf)
+                time_now = datetime.strptime(datetime.now().strftime(tf), tf)
+                sleep_time = int((slot_time - time_now).total_seconds()) + 20
+                
 
             if timeslot_data:
                 if timeslot_data[1] == "0":
