@@ -123,20 +123,24 @@ def select_location(bookingslist: list):
         return loc_keys[user_input]
 
 
-def select_day_time(bookingslist: list):
-    # Key for time
-    time_keys = list(bookingslist)
+def select_day_time(bookingslist: list, days):
+    # Manipulate data to get day_key into a list of elements.
+    # ie {days: {time: (booking_slot)}}: [(day, 'time'),...]
+    all_timeslots = []
+    for i in bookingslist:
+        for j in bookingslist.get(i):
+            all_timeslots.append((i, j))
 
     print("Select your time:")
-    print("  0: Select location")
-    for i, elem in enumerate(time_keys):
-        slot_elem = bookingslist.get(elem)
-        print(f"  {i+1}: {slot_elem[2]}, {time_keys[i]}, slots: {slot_elem[1]}")
-    user_input = get_user_input(len(bookingslist))
+    print("  0: Return to select location")
+    for i, (d, t) in enumerate(all_timeslots):
+        print(f"  {i+1}: {days.get(d)}, {t}, slots: {bookingslist.get(d).get(t)[1]}")
+
+    user_input = get_user_input(len(all_timeslots))
     if user_input is None:
         return None
     else:
-        return time_keys[user_input]
+        return all_timeslots[user_input]
 
 
 def get_bookings(day, query1, query2):
@@ -158,7 +162,7 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
     tf, tb = "%H:%M", "[0-9]+:[0-9]+"
     time_now = datetime.strptime(datetime.now().strftime(tf), tf)
 
-    # Empty dict. Can be in for loop due to python scope. C-like programmers would be confused though...
+    # Empty dict. Can be in for loop due to python scope. C-like lang programmers would be confused though...
     booking_list = {}
 
     # Add all relevant data for each booking at each location.
@@ -172,25 +176,35 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
         # Add day to the dict
         for j in bookday_list:
             # Check status of the booking activity. OR If there is a message then you can't book
-            if "inactive" in j["class"] or j.find("span", class_="message"):
+            if "inactive" in j["class"]:
                 continue
 
-            # Main key
+            # Main keys
             location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
             time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
-            booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+
+            #Get booking url
+            booking_url = None
+            #If there is no message, then there exist a link. Add the link.
+            if not j.find("span", class_="message"):
+                booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+
+            # Get number of slots
             slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
 
             # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
             if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
                 continue
 
-            # If current location doesn't exist, add an empty dict
+            # If current location doesn't exist, and day, add an empty dict
             if not booking_list.get(location):
                 booking_list[location] = {}
+            if not booking_list.get(location).get(i):
+                booking_list[location][i] = {}
 
-            # Add time as key, then bookingurl and slots in a tuple
-            booking_list[location][i] = {time_book: (booking_url, slots[1])}
+            # Add booking_url and number of slots to the list.
+            # Keys: Location, Day, Timeslot
+            booking_list[location][i][time_book] = (booking_url, slots[1])
     return booking_list
 
 
@@ -207,7 +221,7 @@ def main():
         if unsorted_bookings:
             # Get all bookings, today and tomorrow
             all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
-            xs = all_bookings
+            #all_bookings.get('Klätterlabbet Centrum').get(1)
 
             # Check if there are any available times for the day.
             if not all_bookings:
@@ -224,6 +238,7 @@ def main():
                     timeslot = None
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
+            # timeslot = (location, day, selected_time)
             timeslot_data = all_bookings.get(timeslot[0]).get(timeslot[1])
 
             if timeslot_data:
