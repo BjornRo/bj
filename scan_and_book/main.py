@@ -48,48 +48,6 @@ username = data["login"]["username"]
 password = data["login"]["password"]
 
 # Functions
-def sort_and_order_bookinglist(main_url, day, days, unsorted_bookings: list):
-
-    # Time related, to sort out unavailable times.
-    tf = "%H:%M"
-    tb = "[0-9]+:[0-9]+"
-    time_now = datetime.strptime(datetime.now().strftime(tf), tf)
-
-    # Empty dict. Can be in for loop due to python scope. C-like programmers would be confused though...
-    booking_list = {}
-
-    # Add all relevant data for each booking at each location.
-    # For loop looks like going i out of array but if sunday, next week is added...
-    for i in range(day, day + 2):
-        bookday_list = unsorted_bookings[i].find_all("li")
-
-        # Pop uncessecary header
-        bookday_list.pop(0)
-
-        for j in bookday_list:
-            # Check status of the booking activity. OR If there is a message then you can't book
-            if "inactive" in j["class"] or j.find("span", class_="message"):
-                continue
-
-            # Main key
-            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
-            booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
-            slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
-
-            # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-            if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
-                continue
-
-            # If current location doesn't exist, add an empty dict
-            if not booking_list.get(location):
-                booking_list[location] = {}
-
-            # Add time as key, then bookingurl and slots in a tuple
-            booking_list[location][time_book] = (booking_url, slots[1], days.get(i % 7))
-    return booking_list
-
-
 def get_user_input(max_value: int):
     user_input = input()
     if user_input.isdigit():
@@ -100,39 +58,6 @@ def get_user_input(max_value: int):
             return None
     print("Enter a valid input!")
     return get_user_input(max_value)
-
-
-def select_location(bookingslist: list):
-    # Key for location
-    loc_keys = list(bookingslist)
-    list.sort(loc_keys)
-
-    # Print all locations
-    print("Select location:")
-    print("  0: Exit")
-    for i, elem in enumerate(loc_keys):
-        print(f"  {i+1}: {elem}")
-    user_input = get_user_input(len(bookingslist))
-    if user_input is None:
-        return None
-    else:
-        return loc_keys[user_input]
-
-
-def select_time(bookingslist: list):
-    # Key for time
-    time_keys = list(bookingslist)
-
-    print("Select your time:")
-    print("  0: Select location")
-    for i, elem in enumerate(time_keys):
-        slot_elem = bookingslist.get(elem)
-        print(f"  {i+1}: {slot_elem[2]}, {time_keys[i]}, slots: {slot_elem[1]}")
-    user_input = get_user_input(len(bookingslist))
-    if user_input is None:
-        return None
-    else:
-        return time_keys[user_input]
 
 
 def post_data(main_url, url_str: str):
@@ -181,6 +106,39 @@ def post_data(main_url, url_str: str):
     return False
 
 
+def select_location(bookingslist: list):
+    # Key for location
+    loc_keys = list(bookingslist)
+    list.sort(loc_keys)
+
+    # Print all locations
+    print("Select location:")
+    print("  0: Exit")
+    for i, elem in enumerate(loc_keys):
+        print(f"  {i+1}: {elem}")
+    user_input = get_user_input(len(bookingslist))
+    if user_input is None:
+        return None
+    else:
+        return loc_keys[user_input]
+
+
+def select_day_time(bookingslist: list):
+    # Key for time
+    time_keys = list(bookingslist)
+
+    print("Select your time:")
+    print("  0: Select location")
+    for i, elem in enumerate(time_keys):
+        slot_elem = bookingslist.get(elem)
+        print(f"  {i+1}: {slot_elem[2]}, {time_keys[i]}, slots: {slot_elem[1]}")
+    user_input = get_user_input(len(bookingslist))
+    if user_input is None:
+        return None
+    else:
+        return time_keys[user_input]
+
+
 def get_bookings(day, query1, query2):
     # Access booking pages
     prsr = "html.parser"
@@ -191,14 +149,54 @@ def get_bookings(day, query1, query2):
         return bookings
     except:
         print("Failed to connect to URL")
-        time.sleep(10)
         return None
+
+
+# Returns {location: {day: {time: (link, slots)}}}
+def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
+    # Time related, to sort out unavailable times.
+    tf, tb = "%H:%M", "[0-9]+:[0-9]+"
+    time_now = datetime.strptime(datetime.now().strftime(tf), tf)
+
+    # Empty dict. Can be in for loop due to python scope. C-like programmers would be confused though...
+    booking_list = {}
+
+    # Add all relevant data for each booking at each location.
+    # For loop looks like going i out of array but if sunday, next week is added...
+    for i in range(day, day + 2):
+        bookday_list = unsorted_bookings[i].find_all("li")
+
+        # Pop uncessecary header
+        bookday_list.pop(0)
+
+        # Add day to the dict
+        for j in bookday_list:
+            # Check status of the booking activity. OR If there is a message then you can't book
+            if "inactive" in j["class"] or j.find("span", class_="message"):
+                continue
+
+            # Main key
+            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
+            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
+            booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+            slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
+
+            # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
+            if slots[1] == "0" and datetime.strptime(re.search(tb, time_book)[0], tf) - time_now <= timedelta(hours=2):
+                continue
+
+            # If current location doesn't exist, add an empty dict
+            if not booking_list.get(location):
+                booking_list[location] = {}
+
+            # Add time as key, then bookingurl and slots in a tuple
+            booking_list[location][i] = {time_book: (booking_url, slots[1])}
+    return booking_list
 
 
 def main():
     # Set to None, to make the algorithm try to automatically book the later selected time.
     timeslot = None
-    location = None
 
     # Flag if it hasn't booked.
     booked = False
@@ -208,7 +206,8 @@ def main():
         # Check if request getting page is successful
         if unsorted_bookings:
             # Get all bookings, today and tomorrow
-            all_bookings = sort_and_order_bookinglist(main_url, day, days, unsorted_bookings)
+            all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
+            xs = all_bookings
 
             # Check if there are any available times for the day.
             if not all_bookings:
@@ -220,7 +219,7 @@ def main():
                 location = select_location(all_bookings)
                 if location is None:
                     return
-                timeslot = (location, select_time(all_bookings.get(location)))
+                day, time_ = select_day_time(all_bookings.get(location), days)
                 if timeslot[1] is None:
                     timeslot = None
 
