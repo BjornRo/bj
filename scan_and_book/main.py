@@ -23,8 +23,13 @@ import os
 import json
 from datetime import datetime, timedelta
 
-# Search every # seconds.
-search_frequency = 60
+# Search every # seconds. Default value.
+search_frequency = 90
+
+if sys.argv[1].isdigit() and 0 < int(sys.argv[1]):
+    search_frequency = int(sys.argv[1])
+else:
+    print(f"Invalid search delay time. Resorts to default {search_frequency} seconds")
 
 # Date related
 year, week, _ = datetime.today().isocalendar()
