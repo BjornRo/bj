@@ -141,8 +141,7 @@ def select_location(bookingslist: list):
     user_input = get_user_input(len(bookingslist))
     if user_input is None:
         return None
-    else:
-        return loc_keys[user_input]
+    return loc_keys[user_input]
 
 
 def select_day_time(all_bookings: list, location, days):
@@ -167,8 +166,7 @@ def select_day_time(all_bookings: list, location, days):
     user_input = get_user_input(len(all_timeslots))
     if user_input is None:
         return None
-    else:
-        return all_timeslots[user_input]
+    return all_timeslots[user_input]
 
 
 def get_bookings(day, query1, query2):
