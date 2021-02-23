@@ -199,16 +199,15 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
 
         # Add day to the dict
         for j in bookday_list:
-            # Check status of the booking activity. OR If there is a message then you can't book
-            if "inactive" in j["class"]:
-                continue
-
             # Get booking url
             booking_url = None
             # If there is no message, then there exist a link. Add the link.
             if not j.find("span", class_="message"):
                 booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
-            elif re.match("dropin", j.find("span", class_="message").text.replace(" ", "").lower()):
+            # Check status of the booking activity. OR If there is a message then you can't book
+            elif "inactive" in j["class"] or re.match(
+                "dropin", j.find("span", class_="message").text.replace(" ", "").lower()
+            ):
                 continue
 
             # Get "number" of slots
