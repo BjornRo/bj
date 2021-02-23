@@ -283,7 +283,7 @@ def main():
                     sys.stdout.write("\r")
                     sys.stdout.write(f" {i} seconds remaining.")
                     sys.stdout.flush()
-                    time.sleep(0.93)
+                    time.sleep(-time.time()%1)
                 sys.stdout.write("\r\n")
                 sys.stdout.flush()
                 print("Trying to book.")
@@ -300,7 +300,7 @@ def main():
                 sys.stdout.write("\r")
                 sys.stdout.write(f"Retry to book, attempts: {attempts}, {i} seconds remaining.")
                 sys.stdout.flush()
-                time.sleep(0.93)
+                time.sleep(-time.time()%1)
             sys.stdout.write("\r\n")
             sys.stdout.flush()
 
