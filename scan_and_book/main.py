@@ -279,11 +279,11 @@ def main():
                 time_now = datetime.strptime(datetime.now().strftime(tf), tf)
                 sleep_time = int((slot_time - time_now).total_seconds()) + 20
                 print(f"Sleeping for {sleep_time} seconds to try to book {re.match(tb, timeslot[1])[0]} at {location}:")
-                for i in range(sleep_time, 0, -1):
+                for i in range(sleep_time, -1, -1):
                     sys.stdout.write("\r")
                     sys.stdout.write(f" {i} seconds remaining.")
                     sys.stdout.flush()
-                    time.sleep(-time.time()%1)
+                    time.sleep(-time.time() % 1)
                 sys.stdout.write("\r\n")
                 sys.stdout.flush()
                 print("Trying to book.")
@@ -296,11 +296,11 @@ def main():
 
         if not booked:
             attempts += 1
-            for i in range(search_frequency, 0, -1):
+            for i in range(search_frequency, -1, -1):
                 sys.stdout.write("\r")
                 sys.stdout.write(f"Retry to book, attempts: {attempts}, {i} seconds remaining.")
                 sys.stdout.flush()
-                time.sleep(-time.time()%1)
+                time.sleep(-time.time() % 1)
             sys.stdout.write("\r\n")
             sys.stdout.flush()
 
