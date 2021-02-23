@@ -56,12 +56,15 @@ queries = (
 username = data["login"]["username"]
 password = data["login"]["password"]
 
+
 def disable_win32_quickedit():
     import ctypes
+
     # Disable quickedit since it freezes the code.
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4|0x80|0x20|0x2|0x10|0x1|0x00|0x100))
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
+
 
 # Functions
 def get_user_input(max_value: int):
@@ -275,8 +278,14 @@ def main():
                 slot_time = datetime.strptime(re.match(tb, timeslot[1])[0], tf)
                 time_now = datetime.strptime(datetime.now().strftime(tf), tf)
                 sleep_time = int((slot_time - time_now).total_seconds()) + 20
-                print(f"Sleeping for {sleep_time} seconds to try to book later...")
-                time.sleep(sleep_time)
+                print(f"Sleeping for {sleep_time} seconds to try to book {re.match(tb, timeslot[1])[0]} at {location}:")
+                for i in range(sleep_time, 0, -1):
+                    sys.stdout.write("\r")
+                    sys.stdout.write(f" {i} seconds remaining.")
+                    sys.stdout.flush()
+                    time.sleep(1)
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
                 continue
 
             if timeslot_data[1] == "0":
