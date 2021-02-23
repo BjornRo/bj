@@ -283,9 +283,10 @@ def main():
                     sys.stdout.write("\r")
                     sys.stdout.write(f" {i} seconds remaining.")
                     sys.stdout.flush()
-                    time.sleep(1)
+                    time.sleep(0.93)
                 sys.stdout.write("\r\n")
                 sys.stdout.flush()
+                print("Trying to book.")
                 continue
 
             if timeslot_data[1] == "0":
@@ -299,7 +300,7 @@ def main():
                 sys.stdout.write("\r")
                 sys.stdout.write(f"Retry to book, attempts: {attempts}, {i} seconds remaining.")
                 sys.stdout.flush()
-                time.sleep(1)
+                time.sleep(0.93)
             sys.stdout.write("\r\n")
             sys.stdout.flush()
 
