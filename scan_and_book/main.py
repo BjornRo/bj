@@ -56,6 +56,13 @@ queries = (
 username = data["login"]["username"]
 password = data["login"]["password"]
 
+def disable_win32_quickedit():
+    import ctypes
+    # Disable quickedit since it freezes the code.
+    if sys.platform == 'win32':
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4|0x80|0x20|0x2|0x10|0x1|0x00|0x100))
+
 # Functions
 def get_user_input(max_value: int):
     user_input = input()
@@ -289,4 +296,5 @@ def main():
 
 
 if __name__ == "__main__":
+    disable_win32_quickedit()
     main()
