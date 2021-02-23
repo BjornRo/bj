@@ -211,6 +211,10 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
             # Get "number" of slots
             slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
 
+            # Main keys
+            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
+            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
+
             # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
             if (
                 i == day
@@ -222,10 +226,6 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
                 <= timedelta(hours=2)
             ):
                 continue
-
-            # Main keys
-            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
 
             # If current location doesn't exist, and day, add an empty dict
             if not booking_list.get(location):
