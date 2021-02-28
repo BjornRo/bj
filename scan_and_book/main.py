@@ -78,6 +78,8 @@ def get_user_input(max_value: int):
             return user_input - 1
         elif user_input == 0:
             return None
+    elif user_input and user_input[0] in ["e","q"]:
+        sys.exit()
     print("Enter a valid input!")
     return get_user_input(max_value)
 
