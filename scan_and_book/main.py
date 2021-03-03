@@ -84,7 +84,7 @@ def get_user_input(max_value: int):
     return get_user_input(max_value)
 
 
-def post_data(main_url, url_str: str):
+def post_data(main_url, url_str: str, loc_time):
     try:
         response = requests.get(url_str, timeout=15)
     except:
@@ -116,7 +116,7 @@ def post_data(main_url, url_str: str):
                 booking_status_soup = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
                 # Check if the post returned error. If no error, then the statement evaluates as None.
                 if not booking_status_soup:
-                    print("Successfully Booked")
+                    print(f"Successfully Booked {loc_time[1]} at {loc_time[0]}.")
                     return True
                 else:
                     error_code = re.sub(" |\r|\n", "", booking_status_soup.text)
@@ -288,7 +288,7 @@ def main():
             if timeslot_data[1] == "0":
                 print("No slots available...")
             else:
-                booked = post_data(main_url, timeslot_data[0])
+                booked = post_data(main_url, timeslot_data[0], (location, timeslot[1]))
 
         if not booked:
             attempts += 1
