@@ -36,6 +36,9 @@ all_bookings = sab.sort_and_order_bookinglist(
 with open("dat.json", "r") as f:
     all_bookings = json.load(f)
 
+@app.context_processor
+def inject_enumerate():
+    return dict(enumerate=enumerate)
 
 @app.route("/")
 def index():
@@ -48,9 +51,28 @@ def booking():
         keys = all_bookings.keys()
         return render_template("booking.html", title="Booking page", select="Facilities:", keys=keys)
     else:
-        result = all_bookings.get(list(request.form)[0])
-        print(result, file=sys.stderr)
-        return render_template("booking.html", title="Booking page", select="Time:", keys=result)
+        keys = list(all_bookings.keys())
+        location = keys[int(list(request.form)[0])]
+        bookingslist = all_bookings.get(location)
+
+        # Wrangle timeslots
+        all_timeslots = []
+        for i in bookingslist:
+            for j in bookingslist.get(i):
+                all_timeslots.append((i, j))
+
+        time_print = []
+        for i, (d, t) in enumerate(all_timeslots):
+            print(days.get(int(d)), file=sys.stderr)
+
+            to_print = f"{days.get(int(d))}, {t}, slots: "
+            if bookingslist.get(d).get(t)[0]:
+                to_print += bookingslist.get(d).get(t)[1]
+            else:
+                to_print += "not unlocked"
+            time_print.append(to_print)
+
+        return render_template("booking.html", title="Booking page", select=f"Select your time for {location}:", keys=time_print)
 
 
 @app.route("/result", methods=["POST"])
