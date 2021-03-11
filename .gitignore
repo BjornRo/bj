@@ -3,6 +3,7 @@
 .vscode
 out/
 trash/
+__pycache__/
 
 # Secret sauce #
 ################

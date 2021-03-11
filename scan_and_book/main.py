@@ -223,7 +223,7 @@ def main(day, main_url, bookings_url, queries, logindata, timeformat, time_re):
         # Check if request getting page is successful
         if unsorted_bookings:
             # Get all bookings, today and tomorrow
-            all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings)
+            all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings, timeformat, time_re)
 
             # Select Booking slot
             while not timeslot:
