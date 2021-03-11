@@ -23,6 +23,10 @@ import os
 import json
 from datetime import datetime, timedelta
 
+ab = "s"
+def p():
+    print("Hello there")
+
 def disable_win32_quickedit():
     import ctypes
 
@@ -148,7 +152,7 @@ def get_bookings(day, query1, query2):
 
 
 # Returns {location: {day: {time: (link, slots)}}}
-def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
+def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list, timeformat, time_re):
     # Empty dict. Can be in for loop due to python scope. C-like lang programmers would be confused though...
     booking_list = {}
 
@@ -185,8 +189,8 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
                 i == day
                 and slots[1] == "0"
                 and (
-                    datetime.strptime(re.search(tb, time_book)[0], tf)
-                    - datetime.strptime(datetime.now().strftime(tf), tf)
+                    datetime.strptime(re.search(time_re, time_book)[0], timeformat)
+                    - datetime.strptime(datetime.now().strftime(timeformat), timeformat)
                 )
                 <= timedelta(hours=2)
             ):
@@ -204,7 +208,7 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
     return booking_list
 
 
-def main(day, main_url, bookings_url, queries, logindata):
+def main(day, main_url, bookings_url, queries, logindata, timeformat, time_re):
     # If it is going to search for a slot, then count number of attempts.
     attempts = 0
     # Set to None, to make the algorithm try to automatically book the later selected time.
@@ -268,6 +272,11 @@ def countdown_blocking(value):
     sys.stdout.write("\r\n")
     sys.stdout.flush()
 
+def load_json():
+    # Load JSON data
+    filepath = os.path.dirname(os.path.realpath(__file__)) + "\\data.json"
+    with open(filepath, "r") as f:
+        return json.load(f)
 
 if __name__ == "__main__":
     # Search every # seconds. Default value.
@@ -285,12 +294,9 @@ if __name__ == "__main__":
     year, week, _ = datetime.today().isocalendar()
     day = datetime.today().isocalendar()[2] - 1
     days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
-    tf, tb = "%H:%M", "[0-9]+:[0-9]+"
+    timeformat, time_re = "%H:%M", "[0-9]+:[0-9]+"
 
-    # Load JSON data
-    os.chdir(os.path.dirname(os.path.realpath(__file__)))
-    with open("data.json", "r") as f:
-        data = json.load(f)
+    data = load_json()
 
     # Links - url
     main_url = data["site"]["main_url"]
@@ -306,4 +312,4 @@ if __name__ == "__main__":
     logindata = {"username": data["login"]["username"], "password": data["login"]["password"]}
 
     disable_win32_quickedit()
-    main(day, main_url, bookings_url, queries, logindata)
+    main(day, main_url, bookings_url, queries, logindata, timeformat, time_re)
