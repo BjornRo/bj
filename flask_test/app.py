@@ -18,12 +18,6 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 # Hardcoded until forms are created.
 jsondata = sab.load_json()
 
-
-@app.route("/")
-def index():
-    return render_template("index.html", title="Main index")
-
-
 year, week, _ = datetime.today().isocalendar()
 day = datetime.today().isocalendar()[2] - 1
 days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
@@ -39,14 +33,30 @@ all_bookings = sab.sort_and_order_bookinglist(
 )
 """
 
-with open('dat.json','r') as f:
+with open("dat.json", "r") as f:
     all_bookings = json.load(f)
 
-@app.route("/booking")
-def booking():
 
-    keys = all_bookings.keys()
-    return render_template("booking.html", title="Booking page", keys=keys)
+@app.route("/")
+def index():
+    return render_template("index.html", title="Main index")
+
+
+@app.route("/booking", methods=["POST", "GET"])
+def booking():
+    if request.method == "GET":
+        keys = all_bookings.keys()
+        return render_template("booking.html", title="Booking page", select="Facilities:", keys=keys)
+    else:
+        result = all_bookings.get(list(request.form)[0])
+        print(result, file=sys.stderr)
+        return render_template("booking.html", title="Booking page", select="Time:", keys=result)
+
+
+@app.route("/result", methods=["POST"])
+def result():
+    request.form
+    return render_template("index.html", title="Main index")
 
 
 if __name__ == "__main__":
