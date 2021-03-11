@@ -23,43 +23,6 @@ import os
 import json
 from datetime import datetime, timedelta
 
-# Search every # seconds. Default value.
-search_frequency = 90
-
-try:
-    if sys.argv[1].isdigit() and 0 < int(sys.argv[1]):
-        search_frequency = int(sys.argv[1])
-    else:
-        print(f"Invalid search delay time. Resorts to default {search_frequency} seconds")
-except:
-    pass
-
-# Date related
-year, week, _ = datetime.today().isocalendar()
-day = datetime.today().isocalendar()[2] - 1
-days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
-tf, tb = "%H:%M", "[0-9]+:[0-9]+"
-
-# Load JSON data
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
-with open("data.json", "r") as f:
-    data = json.load(f)
-
-# Links - url
-main_url = data["site"]["main_url"]
-bookings_url = data["site"]["bookings_url"]
-
-# Week, Week+1
-queries = (
-    data["site"]["query"].format(year, week),
-    data["site"]["query"].format(year, (week % datetime(year, 12, 31).isocalendar()[1]) + 1),
-)
-
-# Username and pass
-username = data["login"]["username"]
-password = data["login"]["password"]
-
-
 def disable_win32_quickedit():
     import ctypes
 
@@ -78,13 +41,13 @@ def get_user_input(max_value: int):
             return user_input - 1
         elif user_input == 0:
             return None
-    elif user_input and user_input[0] in ["e","q"]:
+    elif user_input and user_input[0] in ["e", "q"]:
         sys.exit()
     print("Enter a valid input!")
     return get_user_input(max_value)
 
 
-def post_data(main_url, url_str: str, loc_time):
+def post_data(main_url, url_str: str, loc_time, logindata):
     try:
         response = requests.get(url_str, timeout=15)
     except:
@@ -106,8 +69,8 @@ def post_data(main_url, url_str: str, loc_time):
                     payload[i["name"]] = i["value"]
                 except:
                     pass
-        payload["Username"] = username
-        payload["Password"] = password
+        payload["Username"] = logindata.get("username")
+        payload["Password"] = logindata.get("password")
 
         # Send data
         try:
@@ -241,7 +204,7 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list):
     return booking_list
 
 
-def main():
+def main(day, main_url, bookings_url, queries, logindata):
     # If it is going to search for a slot, then count number of attempts.
     attempts = 0
     # Set to None, to make the algorithm try to automatically book the later selected time.
@@ -288,7 +251,7 @@ def main():
             if timeslot_data[1] == "0":
                 print("No slots available...")
             else:
-                booked = post_data(main_url, timeslot_data[0], (location, timeslot[1]))
+                booked = post_data(main_url, timeslot_data[0], (location, timeslot[1]), logindata)
 
         if not booked:
             attempts += 1
@@ -307,5 +270,40 @@ def countdown_blocking(value):
 
 
 if __name__ == "__main__":
+    # Search every # seconds. Default value.
+    search_frequency = 90
+
+    try:
+        if sys.argv[1].isdigit() and 0 < int(sys.argv[1]):
+            search_frequency = int(sys.argv[1])
+        else:
+            print(f"Invalid search delay time. Resorts to default {search_frequency} seconds")
+    except:
+        pass
+
+    # Date related
+    year, week, _ = datetime.today().isocalendar()
+    day = datetime.today().isocalendar()[2] - 1
+    days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+    tf, tb = "%H:%M", "[0-9]+:[0-9]+"
+
+    # Load JSON data
+    os.chdir(os.path.dirname(os.path.realpath(__file__)))
+    with open("data.json", "r") as f:
+        data = json.load(f)
+
+    # Links - url
+    main_url = data["site"]["main_url"]
+    bookings_url = data["site"]["bookings_url"]
+
+    # Week, Week+1
+    queries = (
+        data["site"]["query"].format(year, week),
+        data["site"]["query"].format(year, (week % datetime(year, 12, 31).isocalendar()[1]) + 1),
+    )
+
+    # Username and pass
+    logindata = {"username": data["login"]["username"], "password": data["login"]["password"]}
+
     disable_win32_quickedit()
-    main()
+    main(day, main_url, bookings_url, queries, logindata)
