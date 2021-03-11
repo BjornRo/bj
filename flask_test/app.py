@@ -20,6 +20,7 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # Hardcoded until forms are created.
 jsondata = sab.load_json()
+logindata = {"username": jsondata["login"]["username"], "password": jsondata["login"]["password"]}
 
 year, week, _ = datetime.today().isocalendar()
 day = datetime.today().isocalendar()[2] - 1
@@ -46,6 +47,8 @@ def inject_enumerate():
 @app.route("/")
 def index():
     return render_template("index.html", title="Main index")
+
+# TODO.. Solve how to store data for each session, or just pass on data...
 
 @app.route("/booking", methods=["POST", "GET"])
 def booking():
@@ -75,11 +78,14 @@ def booking():
                         to_print += bookingslist.get(d).get(t)[1]
                     else:
                         to_print += "not unlocked"
-                    time_print.append((to_print, (location, t)))
+                    time_print.append((to_print, (location, d, t)))
                 return render_template("booking.html", title="Booking page", select=f"Select your time for {location}:", keys=time_print)
             else:
                 print(resdata, file=sys.stderr)
-                # ['selected number', "(location, time)"]
+                loc_day_time = ast.literal_eval(resdata[1])
+                link, slots = all_bookings.get(loc_day_time[0]).get(loc_day_time[1]).get(loc_day_time[2])
+                # TODO Check if its possible to book.
+                response = sab.post_data(main_url, link)
                 return redirect(url_for('index'))
         except:
             return "404"

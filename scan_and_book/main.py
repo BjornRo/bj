@@ -244,10 +244,10 @@ def main(day, main_url, bookings_url, queries, logindata, timeformat, time_re):
             # If Link is None, then wait until there are less or equal to 24h to that slot.
             # Then continue to query the booking again also to get a link.
             if not timeslot_data[0]:
-                slot_time = datetime.strptime(re.match(tb, timeslot[1])[0], tf)
-                time_now = datetime.strptime(datetime.now().strftime(tf), tf)
+                slot_time = datetime.strptime(re.match(time_re, timeslot[1])[0], timeformat)
+                time_now = datetime.strptime(datetime.now().strftime(timeformat), timeformat)
                 sleep_time = int((slot_time - time_now).total_seconds()) + 20
-                print(f"Sleeping for {sleep_time} seconds to try to book {re.match(tb, timeslot[1])[0]} at {location}:")
+                print(f"Sleeping for {sleep_time} seconds to try to book {re.match(time_re, timeslot[1])[0]} at {location}:")
                 countdown_blocking(sleep_time)
                 print("Trying to book.")
                 continue
