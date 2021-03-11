@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, redirect
 import json
 import sys
 from datetime import datetime, timedelta
@@ -6,7 +6,10 @@ import re
 from bs4 import BeautifulSoup
 import time
 import pickle
+import ast
 import os
+
+from flask.helpers import url_for
 
 # Import booking script
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
@@ -44,36 +47,42 @@ def inject_enumerate():
 def index():
     return render_template("index.html", title="Main index")
 
-
 @app.route("/booking", methods=["POST", "GET"])
 def booking():
     if request.method == "GET":
-        keys = all_bookings.keys()
+        keys = [(i,i) for i in all_bookings.keys()]
         return render_template("booking.html", title="Booking page", select="Facilities:", keys=keys)
     else:
-        keys = list(all_bookings.keys())
-        location = keys[int(list(request.form)[0])]
-        bookingslist = all_bookings.get(location)
+        resdata = list(request.form)
+        try:
+            # Check if selected time
+            if resdata[1] in all_bookings.keys():
+                location = resdata[1]
+                bookingslist = all_bookings.get(location)
 
-        # Wrangle timeslots
-        all_timeslots = []
-        for i in bookingslist:
-            for j in bookingslist.get(i):
-                all_timeslots.append((i, j))
+                # Wrangle timeslots
+                all_timeslots = []
+                for i in bookingslist:
+                    for j in bookingslist.get(i):
+                        all_timeslots.append((i, j))
 
-        time_print = []
-        for i, (d, t) in enumerate(all_timeslots):
-            print(days.get(int(d)), file=sys.stderr)
+                time_print = []
+                for i, (d, t) in enumerate(all_timeslots):
+                    print(days.get(int(d)), file=sys.stderr)
 
-            to_print = f"{days.get(int(d))}, {t}, slots: "
-            if bookingslist.get(d).get(t)[0]:
-                to_print += bookingslist.get(d).get(t)[1]
+                    to_print = f"{days.get(int(d))}, {t}, slots: "
+                    if bookingslist.get(d).get(t)[0]:
+                        to_print += bookingslist.get(d).get(t)[1]
+                    else:
+                        to_print += "not unlocked"
+                    time_print.append((to_print, (location, t)))
+                return render_template("booking.html", title="Booking page", select=f"Select your time for {location}:", keys=time_print)
             else:
-                to_print += "not unlocked"
-            time_print.append(to_print)
-
-        return render_template("booking.html", title="Booking page", select=f"Select your time for {location}:", keys=time_print)
-
+                print(resdata, file=sys.stderr)
+                # ['selected number', "(location, time)"]
+                return redirect(url_for('index'))
+        except:
+            return "404"
 
 @app.route("/result", methods=["POST"])
 def result():
@@ -82,4 +91,4 @@ def result():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, threaded=False)

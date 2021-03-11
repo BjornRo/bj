@@ -6,9 +6,12 @@
 {% block content %}
 <h2>Booking page</h2>
 <h3>{{select}}</h3>
-{% for i,k in enumerate(keys) %}
+{% for i,(k,v) in enumerate(keys) %}
 <form action="/booking" method="POST">
-    <li><input type="submit" name="{{i}}" value="{{k}}"></li>
+    <li>
+        <input type="submit" name="{{i}}" value="{{k}}">
+        <input type="hidden" name="{{v}}">
+    </li>
 </form>
 {%endfor%}
 
