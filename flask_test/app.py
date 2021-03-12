@@ -13,6 +13,7 @@ from flask.helpers import url_for
 
 # Import booking script
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+from scan_and_book import MainController
 import scan_and_book as sab
 
 app = Flask(__name__)

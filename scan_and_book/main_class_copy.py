@@ -206,6 +206,44 @@ def get_user_input(max_value: int):
     return get_user_input(max_value)
 
 
+def select_location(bookingslist: list):
+    # Key for location
+    loc_keys = list(bookingslist)
+    list.sort(loc_keys)
+
+    # Print all locations
+    print("Select location:")
+    print("  0: Exit")
+    for i, elem in enumerate(loc_keys):
+        print(f"  {i+1}: {elem}")
+    user_input = get_user_input(len(bookingslist))
+    if user_input is None:
+        return None
+    return loc_keys[user_input]
+
+
+def select_day_time(all_bookings: list, location, tf):
+    slotlist = all_bookings.get(location)
+    # Manipulate data to get day_key into a list of elements.
+    # ie {day: {datetime: (slot_data)}}: [datetime,...]
+    all_timeslots = tuple(slotlist)
+
+    print(f"Select your time for {location}:")
+    print("  0: Return to select location")
+    for i, t in enumerate(all_timeslots):
+        to_print = f"  {i+1}: {day_int_to_str(t.weekday())}, {time_interval_str(t, slotlist.get(t)[0], tf)}, slots:"
+        if slotlist.get(t)[1]:
+            to_print += " " + slotlist.get(t)[2]
+        else:
+            to_print += " not unlocked"
+        print(to_print)
+
+    user_input = get_user_input(len(all_timeslots))
+    if user_input is None:
+        return None
+    return all_timeslots[user_input]
+
+
 def day_int_to_str(value):
     return {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}.get(value)
 
@@ -215,169 +253,55 @@ def time_interval_str(time_from: dt, time_to: dt, timeform) -> str:
 
 
 class MainController:
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq=90):
-        self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query)
-        self.attempts = 0
-        self.booked = False
-        self.timeform = self.control.get_timeform()
-        self.search_freq = search_freq
-
-        # Data
-        self.all_bookings = []
-        self.location = None
-        self.timeslot = None
-        self.timeslot_data = None
-
-    def query_get_bookings(self):
-        self.control.query_booking_site()
-        self.control.sort_data()
-        self.all_bookings = object.get_data()
-
-    def get_location_list(self) -> list:
-        loc_keys = list(self.all_bookings)
-        list.sort(loc_keys)
-        return loc_keys
-
-    def query_booking_sort(self):
-        b = self.control.query_booking_site()
-        if b:
-            self.control.sort_data()
-            self.all_bookings = self.control.get_data()
-        return b
-
-    def post_data(self, link, logindata):
-        res = self.control.post_data(link, logindata)
-        if res[0]:
-            self.booked = True
-        return res
-
-    def set_timeslot(self, timeslot):
-        self.timeslot = timeslot
-
-    def get_timeform(self):
-        return self.timeform
-
-    def set_location(self, location):
-        self.location = location
-
-    def get_location(self):
-        return self.location
-
-    def get_timeslot(self):
-        return self.timeslot
-
-    def get_slotlist_string(self):
-        slot_strings = []
-        slot_list = self.all_bookings.get(self.location)
-        slot_keys = tuple(slot_list)
-
-        for t in slot_keys:
-            to_print = (
-                f"{day_int_to_str(t.weekday())}, {time_interval_str(t, slot_list.get(t)[0], self.timeform)}, slots:"
-            )
-            if slot_list.get(t)[1]:
-                to_print += " " + slot_list.get(t)[2]
-            else:
-                to_print += " not unlocked"
-            slot_strings.append(to_print)
-        return slot_strings
-
-    def slot_time_interval(self) -> str:
-        return (
-            dt.strftime(self.get_timeslot(), self.get_timeform())
-            + "-"
-            + dt.strftime(self.get_timeslot_data()[0], self.get_timeform())
-        )
-
-    def get_all_timeslots(self):
-        return tuple(self.all_bookings.get(self.location))
-
-    def get_booked(self):
-        return self.booked
-
-    def get_timeslot_data(self):
-        return self.all_bookings.get(self.location).get(self.timeslot)
-
-    def get_attempts(self):
-        return self.attempts
-
-    def succ_attempts(self):
-        self.attempts += 1
-
-    def get_search_freq(self):
-        return self.search_freq
-
-    def set_search_freq(self, search_freq):
-        self.search_freq = search_freq
+    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq: int):
+        control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query)
 
 
-def select_day_time(object):
-    # Manipulate data to get day_key into a list of elements.
-    # ie {day: {datetime: (slot_data)}}: [datetime,...]
-    print(f"Select your time for {object.get_location()}:")
-    print("  0: Return to select location")
-    for i, t in enumerate(object.get_slotlist_string()):
-        print(f"  {i+1}: {t}")
-
-    all_timeslots = object.get_all_timeslots()
-    user_input = get_user_input(len(all_timeslots))
-    if user_input is None:
-        return None
-    return all_timeslots[user_input]
-
-
-def select_location(loc_list):
-    # Print all locations
-    print("Select location:")
-    print("  0: Exit")
-    for i, elem in enumerate(loc_list):
-        print(f"  {i+1}: {elem}")
-    user_input = get_user_input(len(loc_list))
-    if user_input is None:
-        return None
-    return loc_list[user_input]
-
-# Example terminal. Follow same pattern for webapp.
-def main(object, logindata):
-    while not object.get_booked():
+def main(object, logindata, search_frequency):
+    attempts = 0
+    booked = False
+    timeslot = None
+    while not booked:
         # Check if request getting page is successful
-        if object.query_booking_sort():
+        if object.query_booking_site():
+            object.sort_data()
+            timeform = object.get_timeform()
+            all_bookings = object.get_data()
             # Select Booking slot
-            while not object.get_timeslot():
-                object.set_location(select_location(object.get_location_list()))
-                if object.get_location() is None:
+            while not timeslot:
+                location = select_location(all_bookings)
+                if location is None:
                     return
-                object.set_timeslot(select_day_time(object))
+                timeslot = select_day_time(all_bookings, location, timeform)
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
             # timeslot = selected_time
             # timeslot_data = (endtime, link = (None | Str), slots)
-            if not object.get_timeslot_data():
+            try:
+                timeslot_data = all_bookings.get(location).get(timeslot)
+            except:
                 return print("Selected location and time is unavailable, stopping")
 
             # If Link is None, then wait until there are less or equal to 24h to that slot.
             # Then continue to query the booking again also to get a link.
-            time_interval_string = object.slot_time_interval()
-            if not object.get_timeslot_data()[1]:
-                sleep_time = (object.get_timeslot() - dt.now()).total_seconds() + 20
-                print(
-                    f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {object.get_location()}:"
-                )
+            time_interval_string = time_interval_str(timeslot, timeslot_data[0], timeform)
+            if not timeslot_data[1]:
+                sleep_time = (timeslot - dt.now()).total_seconds() + 20
+                print(f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {location}:")
                 countdown_blocking(sleep_time)
                 print("Trying to book.")
                 continue
 
-            if object.get_timeslot_data()[2] == "0":
+            if timeslot_data[2] == "0":
                 print("No slots available...")
             else:
-                booked = object.post_data(object.get_timeslot_data()[1], logindata)
+                booked = object.post_data(timeslot_data[1], logindata)
 
         if not booked[0]:
-            object.succ_attempts()
-            print(f"Retry to book in {obj.get_search_freq()} seconds, total booking attempts: {object.get_attempts()}")
-            countdown_blocking(object.get_search_freq())
+            print(f"Retry to book in {search_frequency} seconds, total booking attempts: {attempts}")
+            countdown_blocking(search_frequency)
         else:
-            print(booked[1].format(time_interval_string, object.get_location()))
+            print(booked[1].format(time_interval_string, location))
 
 
 def countdown_blocking(value):
@@ -399,21 +323,23 @@ def load_json():
 
 if __name__ == "__main__":
     # Search every # seconds. Default value.
+    search_frequency = 90
+
+    try:
+        if sys.argv[1].isdigit() and 0 < int(sys.argv[1]):
+            search_frequency = int(sys.argv[1])
+        else:
+            print(f"Invalid search delay time. Resorts to default {search_frequency} seconds")
+    except:
+        pass
+
     dat = load_json()
 
     # Username and pass
     logindata = {"username": dat["login"]["username"], "password": dat["login"]["password"]}
 
     # Create object
-    obj = MainController(0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"])
-
-    try:
-        if sys.argv[1].isdigit() and 0 < int(sys.argv[1]):
-            obj.set_search_freq(int(sys.argv[1]))
-        else:
-            print(f"Invalid search delay time. Resorts to default {obj.get_search_freq()} seconds")
-    except:
-        pass
+    obj = QueryPostSiteF(0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"])
 
     disable_win32_quickedit()
-    main(obj, logindata)
+    main(obj, logindata, search_frequency)
