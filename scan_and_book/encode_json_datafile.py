@@ -8,8 +8,9 @@ data['login'] = {
 }
 
 data['site'] = {
-    'main_url': '',
-    'bookings_url': '',
+    'protocol': 'https://',
+    'main_url': 'site.this',
+    'query_suburl': '/path',
     'query': "?value1=&value2="
 }
 

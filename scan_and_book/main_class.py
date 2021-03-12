@@ -14,6 +14,7 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Programming IS Math: f(g(h(x)))
 """
 
+from typing import Union
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -23,8 +24,10 @@ import os
 import json
 from datetime import datetime, timedelta
 
+
 def p():
     print("Hello there")
+
 
 def disable_win32_quickedit():
     import ctypes
@@ -137,19 +140,6 @@ def select_day_time(all_bookings: list, location, days):
     return all_timeslots[user_input]
 
 
-def get_bookings(day, query1, query2):
-    # Access booking pages
-    prsr = "html.parser"
-    try:
-        bookings = BeautifulSoup(requests.get(query1, timeout=10).content, prsr).find_all("li", class_="day")
-        if day == 6:
-            bookings += BeautifulSoup(requests.get(query2, timeout=10).content, prsr).find_all("li", class_="day")
-        return bookings
-    except:
-        print("Failed to connect to URL")
-        return None
-
-
 # Returns {location: {day: {time: (link, slots)}}}
 def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list, timeformat, time_re):
     # Empty dict. Can be in for loop due to python scope. C-like lang programmers would be confused though...
@@ -207,16 +197,129 @@ def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list, timeforma
     return booking_list
 
 
+class QueryPost:
+    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str):
+        # Attempts for retrying.
+        self.attempts = 0
+        # timeslot = (location, day, selected_time)
+        self.timeslot = None
+        # Flag if object has successfully booked.
+        self.booked = False
+        # Timeout, default 10.
+        self.timeout = 10
+
+        # Time related
+        self.year, self.week, self.day = datetime.today().isocalendar()
+        # If Monday starts with 0 or 1. Adjust it.
+        self.day += first_wkday_num - 1
+
+        # URL
+        self.main_url = protocol + hostname
+        self.query_url = self.main_url + path
+
+        # Data-related
+        self._rawdata_buffer = []
+        # Usable data in dict form.
+        self.data = {}
+
+    def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> list:
+        self._rawdata_buffer += BeautifulSoup(
+            requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
+        ).find_all(find_tag, class_=tag_class)
+
+    def set_timeout(self, timeout):
+        self.timeout = timeout
+
+    def sort_data():
+        pass
+
+    def post_data():
+        pass
+
+
+class QueryPostSiteF(QueryPost):
+    # To be a little more verbose, *args works as well
+    def __init__(
+        self,
+        first_wkday_num: int,
+        protocol: str,
+        hostname: str,
+        path: str,
+        query: str,
+        timeformat: str,
+        time_regex: str,
+    ):
+        super().__init__(first_wkday_num, protocol, hostname, path)
+        self.timeformat = timeformat
+        self.time_regex = time_regex
+        self.queries = (
+            query.format(self.year, self.week),
+            query.format(self.year, (self.week % datetime(self.year, 12, 31).isocalendar()[1]) + 1),
+        )
+
+    # Query site
+    def query_booking_site(self):
+        super().query_site(queries[0], "li", "day")
+        if self.day == 6:
+            super().query_site(queries[1], "li", "day")
+
+    def sort_data(self):
+        for i in range(day, day + 2):
+            bookday_list = self._rawdata[i].find_all("li")
+
+            # Pop uncessecary header
+            bookday_list.pop(0)
+
+            # Add day to the dict
+            for j in bookday_list:
+                # Get booking url
+                booking_url = None
+                # If there is no message, then there exist a link. Add the link.
+                if not j.find("span", class_="message"):
+                    booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+                # Check status of the booking activity. OR If there is a message then you can't book
+                elif "inactive" in j["class"] or re.match(
+                    "dropin", j.find("span", class_="message").text.replace(" ", "").lower()
+                ):
+                    continue
+
+                # Get "number" of slots
+                slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
+
+                # Main keys
+                location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
+                time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
+
+                # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
+                if (
+                    i == day
+                    and slots[1] == "0"
+                    and (
+                        datetime.strptime(re.search(time_re, time_book)[0], timeformat)
+                        - datetime.strptime(datetime.now().strftime(timeformat), timeformat)
+                    )
+                    <= timedelta(hours=2)
+                ):
+                    continue
+
+                # If current location doesn't exist, and day, add an empty dict
+                if not booking_list.get(location):
+                    booking_list[location] = {}
+                if not booking_list.get(location).get(i):
+                    booking_list[location][i] = {}
+
+                # Add booking_url and number of slots to the list.
+                # Keys: Location, Day, Timeslot
+                booking_list[location][i][time_book] = (booking_url, slots[1])
+        return booking_list
+
+
+a = QueryPost(0, "https://", "bbb.sss", "/datascrape")
+c = QueryPost()
+b = QueryPostSiteF(0, "https://", "bbb.sss", "/datascrape", "?value={}", "%H:%M", "[0-9]+:[0-9]+")
+
+
 def main(day, main_url, bookings_url, queries, logindata, timeformat, time_re):
-    # If it is going to search for a slot, then count number of attempts.
-    attempts = 0
-    # Set to None, to make the algorithm try to automatically book the later selected time.
-    timeslot = None
-    location = None
-
-    # Flag if it hasn't booked.
-    booked = False
-
     while not booked:
         unsorted_bookings = get_bookings(day, bookings_url + queries[0], bookings_url + queries[1])
         # Check if request getting page is successful
@@ -246,7 +349,9 @@ def main(day, main_url, bookings_url, queries, logindata, timeformat, time_re):
                 slot_time = datetime.strptime(re.match(time_re, timeslot[1])[0], timeformat)
                 time_now = datetime.strptime(datetime.now().strftime(timeformat), timeformat)
                 sleep_time = int((slot_time - time_now).total_seconds()) + 20
-                print(f"Sleeping for {sleep_time} seconds to try to book {re.match(time_re, timeslot[1])[0]} at {location}:")
+                print(
+                    f"Sleeping for {sleep_time} seconds to try to book {re.match(time_re, timeslot[1])[0]} at {location}:"
+                )
                 countdown_blocking(sleep_time)
                 print("Trying to book.")
                 continue
@@ -271,11 +376,13 @@ def countdown_blocking(value):
     sys.stdout.write("\r\n")
     sys.stdout.flush()
 
+
 def load_json():
     # Load JSON data
     filepath = os.path.dirname(os.path.realpath(__file__)) + "\\data.json"
     with open(filepath, "r") as f:
         return json.load(f)
+
 
 if __name__ == "__main__":
     # Search every # seconds. Default value.
@@ -298,8 +405,8 @@ if __name__ == "__main__":
     data = load_json()
 
     # Links - url
-    main_url = data["site"]["hostname"]
-    bookings_url = data["site"]["path"]
+    main_url = data["site"]["main_url"]
+    bookings_url = data["site"]["bookings_suburl"]
 
     # Week, Week+1
     queries = (
@@ -311,4 +418,4 @@ if __name__ == "__main__":
     logindata = {"username": data["login"]["username"], "password": data["login"]["password"]}
 
     disable_win32_quickedit()
-    main(day, main_url, main_url+bookings_url, queries, logindata, timeformat, time_re)
+    main(day, main_url, bookings_url, queries, logindata, timeformat, time_re)

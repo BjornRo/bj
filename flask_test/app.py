@@ -48,7 +48,8 @@ def inject_enumerate():
 def index():
     return render_template("index.html", title="Main index")
 
-# TODO.. Solve how to store data for each session, or just pass on data...
+# TODO.. Solve how to store data for each session, or just pass on data...Or dynamically update
+# to keep the data for the session.
 
 @app.route("/booking", methods=["POST", "GET"])
 def booking():
