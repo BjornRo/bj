@@ -279,8 +279,8 @@ def main(object, logindata, search_frequency):
 
             # If Link is None, then wait until there are less or equal to 24h to that slot.
             # Then continue to query the booking again also to get a link.
+            time_interval_string = time_interval_str(timeslot, timeslot_data[0], timeform)
             if not timeslot_data[1]:
-                time_interval_string = time_interval_str(timeslot, timeslot_data[0], timeform)
                 sleep_time = (timeslot - dt.now()).total_seconds() + 20
                 print(f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {location}:")
                 countdown_blocking(sleep_time)
