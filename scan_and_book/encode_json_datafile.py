@@ -9,8 +9,8 @@ data['login'] = {
 
 data['site'] = {
     'protocol': 'https://',
-    'main_url': 'site.this',
-    'query_suburl': '/path',
+    'hostname': 'site.this',
+    'path': '/path',
     'query': "?value1=&value2="
 }
 

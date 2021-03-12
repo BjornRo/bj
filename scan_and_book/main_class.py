@@ -179,41 +179,6 @@ class QueryPostSiteF(QueryPost):
         return self.timeform
 
 
-def p():
-    print("Hello there")
-
-
-def disable_win32_quickedit():
-    import ctypes
-
-    # Disable quickedit since it freezes the code.
-    if sys.platform == "win32":
-        kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
-
-
-def get_user_input(max_value: int):
-    user_input = input()
-    if user_input.isdigit():
-        user_input = int(user_input)
-        if 1 <= user_input <= int(max_value):
-            return user_input - 1
-        elif user_input == 0:
-            return None
-    elif user_input and user_input[0] in ["e", "q"]:
-        sys.exit()
-    print("Enter a valid input!")
-    return get_user_input(max_value)
-
-
-def day_int_to_str(value):
-    return {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}.get(value)
-
-
-def time_interval_str(time_from: dt, time_to: dt, timeform) -> str:
-    return dt.strftime(time_from, timeform) + "-" + dt.strftime(time_to, timeform)
-
-
 class MainController:
     def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq=90):
         self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query)
@@ -311,6 +276,41 @@ class MainController:
         self.search_freq = search_freq
 
 
+def p():
+    print("Hello there")
+
+
+def disable_win32_quickedit():
+    import ctypes
+
+    # Disable quickedit since it freezes the code.
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
+
+
+def get_user_input(max_value: int):
+    user_input = input()
+    if user_input.isdigit():
+        user_input = int(user_input)
+        if 1 <= user_input <= int(max_value):
+            return user_input - 1
+        elif user_input == 0:
+            return None
+    elif user_input and user_input[0] in ["e", "q"]:
+        sys.exit()
+    print("Enter a valid input!")
+    return get_user_input(max_value)
+
+
+def day_int_to_str(value):
+    return {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}.get(value)
+
+
+def time_interval_str(time_from: dt, time_to: dt, timeform) -> str:
+    return dt.strftime(time_from, timeform) + "-" + dt.strftime(time_to, timeform)
+
+
 def select_day_time(object):
     # Manipulate data to get day_key into a list of elements.
     # ie {day: {datetime: (slot_data)}}: [datetime,...]
@@ -336,6 +336,7 @@ def select_location(loc_list):
     if user_input is None:
         return None
     return loc_list[user_input]
+
 
 # Example terminal. Follow same pattern for webapp.
 def main(object, logindata):
