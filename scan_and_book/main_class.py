@@ -83,7 +83,7 @@ class QueryPostSiteF(QueryPost):
         except:
             return False
 
-    def clear_data(self) -> bool:
+    def clear_data(self):
         self.data = {}
 
     def sort_data(self) -> bool:
