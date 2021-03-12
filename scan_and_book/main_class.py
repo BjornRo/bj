@@ -193,15 +193,16 @@ class MainController:
         self.timeslot = None
         self.timeslot_data = None
 
-    def query_get_bookings(self):
-        self.control.query_booking_site()
-        self.control.sort_data()
-        self.all_bookings = object.get_data()
+    def get_allbookings(self):
+        return self.all_bookings
 
     def get_location_list(self) -> list:
         loc_keys = list(self.all_bookings)
         list.sort(loc_keys)
         return loc_keys
+
+    def get_control(self):
+        return self.control
 
     def query_booking_sort(self):
         b = self.control.query_booking_site()
@@ -254,8 +255,11 @@ class MainController:
             + dt.strftime(self.get_timeslot_data()[0], self.get_timeform())
         )
 
-    def get_all_timeslots(self):
-        return tuple(self.all_bookings.get(self.location))
+    def get_all_timeslots(self, location=None):
+        if not location:
+            return tuple(self.all_bookings.get(self.location))
+        else:
+            return tuple(self.all_bookings.get(location))
 
     def get_booked(self):
         return self.booked
@@ -311,7 +315,7 @@ def time_interval_str(time_from: dt, time_to: dt, timeform) -> str:
     return dt.strftime(time_from, timeform) + "-" + dt.strftime(time_to, timeform)
 
 
-def select_day_time(object):
+def select_day_time(object: MainController):
     # Manipulate data to get day_key into a list of elements.
     # ie {day: {datetime: (slot_data)}}: [datetime,...]
     print(f"Select your time for {object.get_location()}:")
@@ -339,7 +343,7 @@ def select_location(loc_list):
 
 
 # Example terminal. Follow same pattern for webapp.
-def main(object, logindata):
+def main(object: MainController, logindata):
     while not object.get_booked():
         # Check if request getting page is successful
         if object.query_booking_sort():
