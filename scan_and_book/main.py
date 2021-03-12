@@ -301,7 +301,7 @@ if __name__ == "__main__":
     main_url = data["site"]["hostname"]
     bookings_url = data["site"]["path"]
 
-    # Week, Week+1
+    # Week, Week+1. Broken since it doesn't update year :)... Fixed in main_class.py
     queries = (
         data["site"]["query"].format(year, week),
         data["site"]["query"].format(year, (week % datetime(year, 12, 31).isocalendar()[1]) + 1),

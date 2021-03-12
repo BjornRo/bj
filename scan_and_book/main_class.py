@@ -14,7 +14,6 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Programming IS Math: f(g(h(x)))
 """
 
-from typing import Union
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -22,179 +21,7 @@ import time
 import sys
 import os
 import json
-from datetime import datetime, timedelta
-
-
-def p():
-    print("Hello there")
-
-
-def disable_win32_quickedit():
-    import ctypes
-
-    # Disable quickedit since it freezes the code.
-    if sys.platform == "win32":
-        kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
-
-
-# Functions
-def get_user_input(max_value: int):
-    user_input = input()
-    if user_input.isdigit():
-        user_input = int(user_input)
-        if 1 <= user_input <= int(max_value):
-            return user_input - 1
-        elif user_input == 0:
-            return None
-    elif user_input and user_input[0] in ["e", "q"]:
-        sys.exit()
-    print("Enter a valid input!")
-    return get_user_input(max_value)
-
-
-def post_data(main_url, url_str: str, loc_time, logindata):
-    try:
-        response = requests.get(url_str, timeout=15)
-    except:
-        print("Failed to get booking link")
-        return False
-
-    # Check if response is correct. Http evaluates: 200-400 is true, else is false.
-    if response:
-        # Soupify it, to extract data to post from 'form', then find all inputs.
-        soup_response = BeautifulSoup(response.content, "html.parser").find("form")
-
-        # Data to post
-        payload = {}
-        for i in soup_response.find_all("input"):
-            try:
-                payload[i["id"]] = i["value"]
-            except:
-                try:
-                    payload[i["name"]] = i["value"]
-                except:
-                    pass
-        payload["Username"] = logindata.get("username")
-        payload["Password"] = logindata.get("password")
-
-        # Send data
-        try:
-            sent = requests.post(main_url + soup_response["action"], data=payload)
-            if sent:
-                booking_status_soup = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
-                # Check if the post returned error. If no error, then the statement evaluates as None.
-                if not booking_status_soup:
-                    print(f"Successfully Booked {loc_time[1]} at {loc_time[0]}.")
-                    return True
-                else:
-                    error_code = re.sub(" |\r|\n", "", booking_status_soup.text)
-                    if re.match(".+?maxantalbokningar", error_code):
-                        print("Error: Already booked - Task failed successfully")
-                        return True
-                    else:
-                        print("Error: Failed to book")
-        except:
-            print("Error: Failed to send data")
-    return False
-
-
-def select_location(bookingslist: list):
-    # Key for location
-    loc_keys = list(bookingslist)
-    list.sort(loc_keys)
-
-    # Print all locations
-    print("Select location:")
-    print("  0: Exit")
-    for i, elem in enumerate(loc_keys):
-        print(f"  {i+1}: {elem}")
-    user_input = get_user_input(len(bookingslist))
-    if user_input is None:
-        return None
-    return loc_keys[user_input]
-
-
-def select_day_time(all_bookings: list, location, days):
-    bookingslist = all_bookings.get(location)
-    # Manipulate data to get day_key into a list of elements.
-    # ie {days: {time: (booking_slot)}}: [(day, 'time'),...]
-    all_timeslots = []
-    for i in bookingslist:
-        for j in bookingslist.get(i):
-            all_timeslots.append((i, j))
-
-    print(f"Select your time for {location}:")
-    print("  0: Return to select location")
-    for i, (d, t) in enumerate(all_timeslots):
-        to_print = f"  {i+1}: {days.get(d)}, {t}, slots: "
-        if bookingslist.get(d).get(t)[0]:
-            to_print += bookingslist.get(d).get(t)[1]
-        else:
-            to_print += "not unlocked"
-        print(to_print)
-
-    user_input = get_user_input(len(all_timeslots))
-    if user_input is None:
-        return None
-    return all_timeslots[user_input]
-
-
-# Returns {location: {day: {time: (link, slots)}}}
-def sort_and_order_bookinglist(main_url, day, unsorted_bookings: list, timeformat, time_re):
-    # Empty dict. Can be in for loop due to python scope. C-like lang programmers would be confused though...
-    booking_list = {}
-
-    # Add all relevant data for each booking at each location.
-    # For loop looks like going i out of array but if sunday, next week is added...
-    for i in range(day, day + 2):
-        bookday_list = unsorted_bookings[i].find_all("li")
-
-        # Pop uncessecary header
-        bookday_list.pop(0)
-
-        # Add day to the dict
-        for j in bookday_list:
-            # Get booking url
-            booking_url = None
-            # If there is no message, then there exist a link. Add the link.
-            if not j.find("span", class_="message"):
-                booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
-            # Check status of the booking activity. OR If there is a message then you can't book
-            elif "inactive" in j["class"] or re.match(
-                "dropin", j.find("span", class_="message").text.replace(" ", "").lower()
-            ):
-                continue
-
-            # Get "number" of slots
-            slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
-
-            # Main keys
-            location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-            time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
-
-            # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-            if (
-                i == day
-                and slots[1] == "0"
-                and (
-                    datetime.strptime(re.search(time_re, time_book)[0], timeformat)
-                    - datetime.strptime(datetime.now().strftime(timeformat), timeformat)
-                )
-                <= timedelta(hours=2)
-            ):
-                continue
-
-            # If current location doesn't exist, and day, add an empty dict
-            if not booking_list.get(location):
-                booking_list[location] = {}
-            if not booking_list.get(location).get(i):
-                booking_list[location][i] = {}
-
-            # Add booking_url and number of slots to the list.
-            # Keys: Location, Day, Timeslot
-            booking_list[location][i][time_book] = (booking_url, slots[1])
-    return booking_list
+from datetime import datetime as dt, timedelta
 
 
 class QueryPost:
@@ -209,7 +36,7 @@ class QueryPost:
         self.timeout = 10
 
         # Time related
-        self.year, self.week, self.day = datetime.today().isocalendar()
+        self.year, self.week, self.day = dt.now().isocalendar()
         # If Monday starts with 0 or 1. Adjust it.
         self.day += first_wkday_num - 1
 
@@ -239,132 +66,237 @@ class QueryPost:
 
 class QueryPostSiteF(QueryPost):
     # To be a little more verbose, *args works as well
-    def __init__(
-        self,
-        first_wkday_num: int,
-        protocol: str,
-        hostname: str,
-        path: str,
-        query: str,
-        timeformat: str,
-        time_regex: str,
-    ):
+    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str):
         super().__init__(first_wkday_num, protocol, hostname, path)
-        self.timeformat = timeformat
-        self.time_regex = time_regex
-        self.queries = (
-            query.format(self.year, self.week),
-            query.format(self.year, (self.week % datetime(self.year, 12, 31).isocalendar()[1]) + 1),
-        )
+        self.timeform = "%H:%M"
+        self.time_regex = "[0-9]+:[0-9]+"
+        day_succ = dt.now() + timedelta(days=1)
+        self.queries = (query.format(self.year, self.week), query.format(day_succ.year, day_succ.isocalendar()[1]))
 
     # Query site
-    def query_booking_site(self):
-        super().query_site(queries[0], "li", "day")
-        if self.day == 6:
-            super().query_site(queries[1], "li", "day")
+    def query_booking_site(self) -> bool:
+        try:
+            super().query_site(self.queries[0], "li", "day")
+            if self.day == 6:
+                super().query_site(self.queries[1], "li", "day")
+            return True
+        except:
+            return False
 
-    def sort_data(self):
-        for i in range(day, day + 2):
-            bookday_list = self._rawdata[i].find_all("li")
+    def clear_data(self) -> bool:
+        self.data = {}
+
+    def sort_data(self) -> bool:
+        # Don't sort if buffer is empty or there exist data.
+        if not self._rawdata_buffer or self.data:
+            return False
+        for i in range(self.day, self.day + 2):
+            bookday_list = self._rawdata_buffer[i].find_all("li")
 
             # Pop uncessecary header
             bookday_list.pop(0)
 
             # Add day to the dict
             for j in bookday_list:
-                # Get booking url
+                # Get booking url. IF time hasn't opened, then the url is none
                 booking_url = None
                 # If there is no message, then there exist a link. Add the link.
                 if not j.find("span", class_="message"):
-                    booking_url = main_url + j.find("div", class_="button-holder").find("a")["href"]
+                    booking_url = self.main_url + j.find("div", class_="button-holder").find("a")["href"]
                 # Check status of the booking activity. OR If there is a message then you can't book
-                elif "inactive" in j["class"] or re.match(
-                    "dropin", j.find("span", class_="message").text.replace(" ", "").lower()
-                ):
+                elif "inactive" in j["class"] or "drop" in j.find("span", class_="message").text.lower():
                     continue
 
-                # Get "number" of slots
-                slots = re.search(":(>[0-9]+|[0-9]+)", re.sub(" |\n|\r", "", j.find("div", class_="status").text))
-
-                # Main keys
+                # Get "number" of slots, location and time
                 location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-                time_book = re.sub(" |\n|\r", "", j.find("div", class_="time").text)
+                slots = re.sub(" |:|\n|\r|[a-zåäö]+", "", j.find("div", class_="status").text.lower())
+                start_end = [x.split(":") for x in re.sub(" |\n|\r", "", j.find("div", class_="time").text).split("-")]
+                txs = [int(t) for subxs in start_end for t in subxs]
+                stime = dt(self.year, dt.now().month, dt.now().day, txs[0], txs[1]) + timedelta(days=(i - self.day))
+                end_time = stime.replace(hour=txs[2], minute=txs[3])
 
                 # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-                if (
-                    i == day
-                    and slots[1] == "0"
-                    and (
-                        datetime.strptime(re.search(time_re, time_book)[0], timeformat)
-                        - datetime.strptime(datetime.now().strftime(timeformat), timeformat)
-                    )
-                    <= timedelta(hours=2)
-                ):
+                if slots == "0" and (stime - dt.now()) <= timedelta(hours=2):
                     continue
 
                 # If current location doesn't exist, and day, add an empty dict
-                if not booking_list.get(location):
-                    booking_list[location] = {}
-                if not booking_list.get(location).get(i):
-                    booking_list[location][i] = {}
+                if not self.data.get(location):
+                    self.data[location] = {}
 
                 # Add booking_url and number of slots to the list.
-                # Keys: Location, Day, Timeslot
-                booking_list[location][i][time_book] = (booking_url, slots[1])
-        return booking_list
+                # Keys: Location, WeekDay, start DateTime
+                self.data[location][stime] = (end_time, booking_url, slots)
+        # Clear the buffer
+        self._rawdata_buffer = []
+        return True
+
+    def post_data(self, booking_url, logindata):
+        try:
+            response = requests.get(booking_url, self.timeout)
+        except:
+            return (False, "Failed to get booking link")
+
+        # Check if response is correct. Http evaluates: 200-400 is true, else is false.
+        if response:
+            # Soupify it, to extract data to post from 'form', then find all inputs.
+            soup_response = BeautifulSoup(response.content, "html.parser").find("form")
+
+            # Data to post
+            payload = {}
+            for i in soup_response.find_all("input"):
+                try:
+                    payload[i["id"]] = i["value"]
+                except:
+                    try:
+                        payload[i["name"]] = i["value"]
+                    except:
+                        pass
+            payload["Username"] = logindata.get("username")
+            payload["Password"] = logindata.get("password")
+
+            # Send data
+            try:
+                sent = requests.post(self.main_url + soup_response["action"], data=payload)
+                if sent:
+                    booking_status_soup = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
+                    # Check if the post returned error. If no error, then the statement evaluates as None.
+                    if not booking_status_soup:
+                        return (True, "Successfully booked {} at {}")
+                    else:
+                        error_code = re.sub(" |\r|\n", "", booking_status_soup.text)
+                        if re.match(".+?maxantalbokningar", error_code):
+                            return (True, "Error: Already booked {} at {}")
+                        else:
+                            return (False, "Error: Failed to book")
+            except:
+                pass
+        return (False, "Error: Failed to send data")
+
+    def get_data(self):
+        return self.data
+
+    def get_timeform(self):
+        return self.timeform
 
 
-a = QueryPost(0, "https://", "bbb.sss", "/datascrape")
-c = QueryPost()
-b = QueryPostSiteF(0, "https://", "bbb.sss", "/datascrape", "?value={}", "%H:%M", "[0-9]+:[0-9]+")
+def p():
+    print("Hello there")
 
 
-def main(day, main_url, bookings_url, queries, logindata, timeformat, time_re):
+def disable_win32_quickedit():
+    import ctypes
+
+    # Disable quickedit since it freezes the code.
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
+
+
+def get_user_input(max_value: int):
+    user_input = input()
+    if user_input.isdigit():
+        user_input = int(user_input)
+        if 1 <= user_input <= int(max_value):
+            return user_input - 1
+        elif user_input == 0:
+            return None
+    elif user_input and user_input[0] in ["e", "q"]:
+        sys.exit()
+    print("Enter a valid input!")
+    return get_user_input(max_value)
+
+
+def select_location(bookingslist: list):
+    # Key for location
+    loc_keys = list(bookingslist)
+    list.sort(loc_keys)
+
+    # Print all locations
+    print("Select location:")
+    print("  0: Exit")
+    for i, elem in enumerate(loc_keys):
+        print(f"  {i+1}: {elem}")
+    user_input = get_user_input(len(bookingslist))
+    if user_input is None:
+        return None
+    return loc_keys[user_input]
+
+
+def select_day_time(all_bookings: list, location, tf):
+    slotlist = all_bookings.get(location)
+    # Manipulate data to get day_key into a list of elements.
+    # ie {day: {datetime: (slot_data)}}: [datetime,...]
+    all_timeslots = tuple(slotlist)
+
+    print(f"Select your time for {location}:")
+    print("  0: Return to select location")
+    for i, t in enumerate(all_timeslots):
+        to_print = f"  {i+1}: {day_int_to_str(t.weekday())}, {time_interval_str(t, slotlist.get(t)[0], tf)}, slots:"
+        if slotlist.get(t)[1]:
+            to_print += " " + slotlist.get(t)[2]
+        else:
+            to_print += " not unlocked"
+        print(to_print)
+
+    user_input = get_user_input(len(all_timeslots))
+    if user_input is None:
+        return None
+    return all_timeslots[user_input]
+
+
+def day_int_to_str(value):
+    return {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}.get(value)
+
+
+def time_interval_str(time_from: dt, time_to: dt, timeform) -> str:
+    return dt.strftime(time_from, timeform) + "-" + dt.strftime(time_to, timeform)
+
+
+def main(object, logindata, search_frequency):
+    attempts = 0
+    booked = False
+    timeslot = None
     while not booked:
-        unsorted_bookings = get_bookings(day, bookings_url + queries[0], bookings_url + queries[1])
         # Check if request getting page is successful
-        if unsorted_bookings:
-            # Get all bookings, today and tomorrow
-            all_bookings = sort_and_order_bookinglist(main_url, day, unsorted_bookings, timeformat, time_re)
-
+        if object.query_booking_site():
+            object.sort_data()
+            timeform = object.get_timeform()
+            all_bookings = object.get_data()
             # Select Booking slot
             while not timeslot:
                 location = select_location(all_bookings)
                 if location is None:
                     return
-                timeslot = select_day_time(all_bookings, location, days)
+                timeslot = select_day_time(all_bookings, location, timeform)
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
-            # timeslot = (day, selected_time)
-            # timeslot_data = (link = (None | Str), slots)
+            # timeslot = selected_time
+            # timeslot_data = (endtime, link = (None | Str), slots)
             try:
-                timeslot_data = all_bookings.get(location).get(timeslot[0]).get(timeslot[1])
+                timeslot_data = all_bookings.get(location).get(timeslot)
             except:
-                print("Selected location and time is unavailable, stopping")
-                return
+                return print("Selected location and time is unavailable, stopping")
 
             # If Link is None, then wait until there are less or equal to 24h to that slot.
             # Then continue to query the booking again also to get a link.
-            if not timeslot_data[0]:
-                slot_time = datetime.strptime(re.match(time_re, timeslot[1])[0], timeformat)
-                time_now = datetime.strptime(datetime.now().strftime(timeformat), timeformat)
-                sleep_time = int((slot_time - time_now).total_seconds()) + 20
-                print(
-                    f"Sleeping for {sleep_time} seconds to try to book {re.match(time_re, timeslot[1])[0]} at {location}:"
-                )
+            if not timeslot_data[1]:
+                time_interval_string = time_interval_str(timeslot, timeslot_data[0], timeform)
+                sleep_time = (timeslot - dt.now()).total_seconds() + 20
+                print(f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {location}:")
                 countdown_blocking(sleep_time)
                 print("Trying to book.")
                 continue
 
-            if timeslot_data[1] == "0":
+            if timeslot_data[2] == "0":
                 print("No slots available...")
             else:
-                booked = post_data(main_url, timeslot_data[0], (location, timeslot[1]), logindata)
+                booked = object.post_data(timeslot_data[1], logindata)
 
-        if not booked:
-            attempts += 1
+        if not booked[0]:
             print(f"Retry to book in {search_frequency} seconds, total booking attempts: {attempts}")
             countdown_blocking(search_frequency)
+        else:
+            print(booked[1].format(time_interval_string, location))
 
 
 def countdown_blocking(value):
@@ -396,26 +328,13 @@ if __name__ == "__main__":
     except:
         pass
 
-    # Date related
-    year, week, _ = datetime.today().isocalendar()
-    day = datetime.today().isocalendar()[2] - 1
-    days = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
-    timeformat, time_re = "%H:%M", "[0-9]+:[0-9]+"
-
-    data = load_json()
-
-    # Links - url
-    main_url = data["site"]["main_url"]
-    bookings_url = data["site"]["bookings_suburl"]
-
-    # Week, Week+1
-    queries = (
-        data["site"]["query"].format(year, week),
-        data["site"]["query"].format(year, (week % datetime(year, 12, 31).isocalendar()[1]) + 1),
-    )
+    dat = load_json()
 
     # Username and pass
-    logindata = {"username": data["login"]["username"], "password": data["login"]["password"]}
+    logindata = {"username": dat["login"]["username"], "password": dat["login"]["password"]}
+
+    # Create object
+    obj = QueryPostSiteF(0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"])
 
     disable_win32_quickedit()
-    main(day, main_url, bookings_url, queries, logindata, timeformat, time_re)
+    main(obj, logindata, search_frequency)
