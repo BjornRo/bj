@@ -163,14 +163,17 @@ class QueryPostSiteF(QueryPost):
                     if not booking_status_soup:
                         return (True, "Successfully booked {} at {}")
                     else:
-                        error_code = re.sub(" |\r|\n", "", booking_status_soup.text)
+                        print(booking_status_soup, file=sys.stderr)
+                        error_code = re.sub(" |\r|\n", "", booking_status_soup.text).lower()
                         if re.match(".+?maxantalbokningar", error_code):
                             return (True, "Error: Already booked {} at {}")
+                        elif re.search("felaktigt", error_code):
+                            return (False, "Error: Wrong username or password.")
                         else:
-                            return (False, "Error: Failed to book")
+                            return (False, "Error: Failed to book.")
             except:
                 pass
-        return (False, "Error: Failed to send data")
+        return (False, "Error: Failed to send data.")
 
     def get_data(self):
         return self.data
@@ -179,6 +182,8 @@ class QueryPostSiteF(QueryPost):
         return self.timeform
 
 
+# Thought of a facade pattern to make it easier to handle.
+# Might need some refactoring... Whatever... Strong dependency to QPSF. MC is a weak entity though.
 class MainController:
     def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq=90):
         self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query)
@@ -188,27 +193,22 @@ class MainController:
         self.search_freq = search_freq
 
         # Data
-        self.all_bookings = []
         self.location = None
         self.timeslot = None
         self.timeslot_data = None
 
     def get_allbookings(self):
-        return self.all_bookings
+        return self.control.data
 
     def get_location_list(self) -> list:
-        loc_keys = list(self.all_bookings)
+        loc_keys = list(self.control.data)
         list.sort(loc_keys)
         return loc_keys
-
-    def get_control(self):
-        return self.control
 
     def query_booking_sort(self):
         b = self.control.query_booking_site()
         if b:
             self.control.sort_data()
-            self.all_bookings = self.control.get_data()
         return b
 
     def post_data(self, link, logindata):
@@ -232,40 +232,51 @@ class MainController:
     def get_timeslot(self):
         return self.timeslot
 
-    def get_slotlist_string(self):
+    # Returns list for that particular location -> [("String", datetime, url_string)]
+    def get_slotlist_string(self, location=None):
+        loc = location if location else self.location
+        if not loc:
+            return []
+
         slot_strings = []
-        slot_list = self.all_bookings.get(self.location)
+        slot_list = self.control.data.get(loc)
         slot_keys = tuple(slot_list)
 
         for t in slot_keys:
-            to_print = (
-                f"{day_int_to_str(t.weekday())}, {time_interval_str(t, slot_list.get(t)[0], self.timeform)}, slots:"
-            )
-            if slot_list.get(t)[1]:
-                to_print += " " + slot_list.get(t)[2]
+            item = slot_list.get(t)
+            to_print = f"{day_int_to_str(t.weekday())}, {time_interval_str(t, item[0], self.timeform)}, slots:"
+            if item[1]:
+                to_print += " " + item[2]
             else:
                 to_print += " not unlocked"
-            slot_strings.append(to_print)
+            slot_strings.append((to_print, t, item[1]))
         return slot_strings
 
-    def slot_time_interval(self) -> str:
-        return (
-            dt.strftime(self.get_timeslot(), self.get_timeform())
-            + "-"
-            + dt.strftime(self.get_timeslot_data()[0], self.get_timeform())
-        )
+    def slot_time_interval(self, ts1=None, ts2=None) -> str:
+        t1 = ts1 if ts1 else self.timeslot
+        t2 = ts2 if ts2 else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
+        if not (t1 and t2):
+            return ""
+        return f"{dt.strftime(t1, self.timeform)}-{dt.strftime(t2, self.timeform)}"
 
     def get_all_timeslots(self, location=None):
-        if not location:
-            return tuple(self.all_bookings.get(self.location))
-        else:
-            return tuple(self.all_bookings.get(location))
+        loc = location if location else self.location
+        if not loc:
+            return ()
+        return tuple(self.control.data.get(loc))
+
+    def get_payload_dict(self):
+        return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
 
     def get_booked(self):
         return self.booked
 
-    def get_timeslot_data(self):
-        return self.all_bookings.get(self.location).get(self.timeslot)
+    def get_timeslot_data(self, location=None, timeslot=None):
+        loc = location if location else self.location
+        ts = timeslot if timeslot else self.timeslot
+        if not (loc and ts):
+            return None
+        return self.control.data.get(loc).get(ts)
 
     def get_attempts(self):
         return self.attempts

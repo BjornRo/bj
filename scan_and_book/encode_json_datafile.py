@@ -11,7 +11,8 @@ data['site'] = {
     'protocol': 'https://',
     'hostname': 'site.this',
     'path': '/path',
-    'query': "?value1=&value2="
+    'query': "?value1={}&value2={}",
+    'validation': "str_to_match"
 }
 
 data['cookies'] = {

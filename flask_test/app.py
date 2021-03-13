@@ -24,14 +24,14 @@ dat = sab.load_json()
 logindata = {"username": dat["login"]["username"], "password": dat["login"]["password"]}
 
 obj = MainController(0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"])
+validation_str = dat["site"]["validate"]
+# obj.query_booking_sort()
 
-"""
-all_bookings = sab.sort_and_order_bookinglist(
-    main_url, day, sab.get_bookings(day, bookings_url + queries[0], bookings_url + queries[1]), timeformat, time_re
-)
-"""
+# with open('data.p','wb') as o:
+#    pickle.dump(obj, o, pickle.HIGHEST_PROTOCOL)
 
-data = pickle.load(open("data.p", "rb"))
+# with open("data.p", "rb") as o:
+#    obj = pickle.load(o)
 
 
 @app.context_processor
@@ -44,49 +44,74 @@ def index():
     return render_template("index.html", title="Main index")
 
 
-# TODO.. Solve how to store data for each session, or just pass on data...Or dynamically update
-# to keep the data for the session.
-
 # obj.query_booking_sort()
 @app.route("/booking", methods=["POST", "GET"])
 def booking():
     if request.method == "GET":
+        obj.query_booking_sort()
+        payload = obj.get_payload_dict()
         return render_template(
-            "booking.html", title="Booking page", dir="/booking", select="Facilities:", keys=sorted(list(data)), loc=0
+            "booking.html", title="Booking page", dir="/booking", select="Facilities:", payload=payload
         )
     elif request.method == "POST":
-        resdata = dict(request.form)["0"]
-        print(resdata, file=sys.stderr)
-        try:
-            if resdata in list(data):
-                print(resdata, file=sys.stderr)
+        formdata = dict(request.form)
+        book_url = formdata.pop("select_time", None)
+        if book_url and validation_str in book_url:
+            try:
+                location_key = list(formdata)[0]
+                location_time = formdata.get(location_key)
+                print(dict(request.form), file=sys.stderr)
                 return render_template(
                     "booking.html",
                     title="Booking page",
                     dir="/result",
-                    select="Time slot:",
-                    keys=list(data.get(resdata)),
-                    data=[dict(request.form)["0"]],
+                    select="Login credentials:",
+                    login=True,
+                    time=location_time,
+                    location=location_key,
+                    book_url=book_url,
+                    payload={0: []},
                 )
-        except:
-            pass
+            except:
+                pass
+        elif book_url is None:
+            return "Invalid time selected"
     return "404"
 
 
 @app.route("/result", methods=["POST"])
 def result():
-    resdata = list(dict(request.form))
-    val = None
-    print(resdata, file=sys.stderr)
-    for i,_ in enumerate(resdata):
-        if resdata[i].isdigit():
-            val = int(resdata.pop(i))
-            break
-    loc = resdata[0]
-    timeslot = tuple(data.get(loc))[val]
-    timeslot_data = data.get(loc).get(timeslot)
-    obj.get_control().post_data(timeslot_data[1],logindata)
-    return render_template("index.html", title="Main index - success")
+    formdata = dict(request.form)
+    print(dict(request.form), file=sys.stderr)
+    book_url = formdata.pop("book_url", None)
+    if book_url and validation_str in book_url:
+        try:
+            payload = {"username": formdata.get("username"), "password": formdata.get("password")}
+            print(payload, file=sys.stderr)
+
+            result, message = obj.post_data(book_url, payload)
+            if not result:
+                return render_template(
+                    "booking.html",
+                    title="Booking page",
+                    dir="/result",
+                    select="Login credentials:",
+                    login=True,
+                    time=formdata.get("location_time"),
+                    location=formdata.get("location"),
+                    book_url=book_url,
+                    message=message,
+                    payload={0: []},
+                )
+            else:
+                return render_template(
+                    "index.html",
+                    title="Main index",
+                    message=message.format(formdata.get("location_time"), formdata.get("location")),
+                )
+        except:
+            pass
+    return "404"
 
 
 if __name__ == "__main__":
