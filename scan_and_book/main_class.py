@@ -14,6 +14,7 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Programming IS Math: f(g(h(x)))
 """
 
+import enum
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -145,12 +146,9 @@ class QueryPostSiteF(QueryPost):
             payload = {}
             for i in soup_response.find_all("input"):
                 try:
-                    payload[i["id"]] = i["value"]
+                    payload[i["name"]] = i["value"]
                 except:
-                    try:
-                        payload[i["name"]] = i["value"]
-                    except:
-                        pass
+                    pass
             payload["Username"] = logindata.get("username")
             payload["Password"] = logindata.get("password")
 
@@ -187,12 +185,12 @@ class QueryPostSiteF(QueryPost):
 class MainController:
     def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq=90):
         self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query)
-        self.attempts = 0
-        self.booked = False
-        self.timeform = self.control.get_timeform()
         self.search_freq = search_freq
+        self.days = {i + first_wkday_num: v for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])}
 
         # Data
+        self.attempts = 0
+        self.booked = False
         self.location = None
         self.timeslot = None
         self.timeslot_data = None
@@ -220,9 +218,6 @@ class MainController:
     def set_timeslot(self, timeslot):
         self.timeslot = timeslot
 
-    def get_timeform(self):
-        return self.timeform
-
     def set_location(self, location):
         self.location = location
 
@@ -244,7 +239,7 @@ class MainController:
 
         for t in slot_keys:
             item = slot_list.get(t)
-            to_print = f"{day_int_to_str(t.weekday())}, {time_interval_str(t, item[0], self.timeform)}, slots:"
+            to_print = f"{self.days.get(t.weekday())}, {self.slot_time_interval(t, item[0])}, slots:"
             if item[1]:
                 to_print += " " + item[2]
             else:
@@ -257,7 +252,7 @@ class MainController:
         t2 = ts2 if ts2 else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
         if not (t1 and t2):
             return ""
-        return f"{dt.strftime(t1, self.timeform)}-{dt.strftime(t2, self.timeform)}"
+        return f"{dt.strftime(t1, self.control.timeform)}-{dt.strftime(t2, self.control.timeform)}"
 
     def get_all_timeslots(self, location=None):
         loc = location if location else self.location
@@ -304,12 +299,12 @@ def disable_win32_quickedit():
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
 
 
-def get_user_input(max_value: int):
+def get_user_input(offset_value: int, max_value: int):
     user_input = input()
     if user_input.isdigit():
         user_input = int(user_input)
-        if 1 <= user_input <= int(max_value):
-            return user_input - 1
+        if 0 <= (user_input + offset_value) < int(max_value):
+            return user_input + offset_value
         elif user_input == 0:
             return None
     elif user_input and user_input[0] in ["e", "q"]:
@@ -318,24 +313,16 @@ def get_user_input(max_value: int):
     return get_user_input(max_value)
 
 
-def day_int_to_str(value):
-    return {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}.get(value)
-
-
-def time_interval_str(time_from: dt, time_to: dt, timeform) -> str:
-    return dt.strftime(time_from, timeform) + "-" + dt.strftime(time_to, timeform)
-
-
-def select_day_time(object: MainController):
+def select_day_time(control: MainController):
     # Manipulate data to get day_key into a list of elements.
     # ie {day: {datetime: (slot_data)}}: [datetime,...]
-    print(f"Select your time for {object.get_location()}:")
+    print(f"Select your time for {control.get_location()}:")
     print("  0: Return to select location")
-    for i, t in enumerate(object.get_slotlist_string()):
-        print(f"  {i+1}: {t}")
+    for i, t in enumerate(control.get_slotlist_string()):
+        print(f"  {i+1}: {t[0]}")
 
-    all_timeslots = object.get_all_timeslots()
-    user_input = get_user_input(len(all_timeslots))
+    all_timeslots = control.get_all_timeslots()
+    user_input = get_user_input(-1, len(all_timeslots))
     if user_input is None:
         return None
     return all_timeslots[user_input]
@@ -347,53 +334,53 @@ def select_location(loc_list):
     print("  0: Exit")
     for i, elem in enumerate(loc_list):
         print(f"  {i+1}: {elem}")
-    user_input = get_user_input(len(loc_list))
+    user_input = get_user_input(-1, len(loc_list))
     if user_input is None:
         return None
     return loc_list[user_input]
 
 
 # Example terminal. Follow same pattern for webapp.
-def main(object: MainController, logindata):
-    while not object.get_booked():
+def main(control: MainController, logindata):
+    while not control.get_booked():
         # Check if request getting page is successful
-        if object.query_booking_sort():
+        if control.query_booking_sort():
             # Select Booking slot
-            while not object.get_timeslot():
-                object.set_location(select_location(object.get_location_list()))
-                if object.get_location() is None:
+            while not control.get_timeslot():
+                control.set_location(select_location(control.get_location_list()))
+                if control.get_location() is None:
                     return
-                object.set_timeslot(select_day_time(object))
+                control.set_timeslot(select_day_time(control))
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
             # timeslot = selected_time
             # timeslot_data = (endtime, link = (None | Str), slots)
-            if not object.get_timeslot_data():
+            if not control.get_timeslot_data():
                 return print("Selected location and time is unavailable, stopping")
 
             # If Link is None, then wait until there are less or equal to 24h to that slot.
             # Then continue to query the booking again also to get a link.
-            time_interval_string = object.slot_time_interval()
-            if not object.get_timeslot_data()[1]:
-                sleep_time = (object.get_timeslot() - dt.now()).total_seconds() + 20
+            time_interval_string = control.slot_time_interval()
+            if not control.get_timeslot_data()[1]:
+                sleep_time = (control.get_timeslot() - dt.now()).total_seconds() + 20
                 print(
-                    f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {object.get_location()}:"
+                    f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {control.get_location()}:"
                 )
                 countdown_blocking(sleep_time)
                 print("Trying to book.")
                 continue
 
-            if object.get_timeslot_data()[2] == "0":
+            if control.get_timeslot_data()[2] == "0":
                 print("No slots available...")
             else:
-                booked = object.post_data(object.get_timeslot_data()[1], logindata)
+                booked = control.post_data(control.get_timeslot_data()[1], logindata)
 
         if not booked[0]:
-            object.succ_attempts()
-            print(f"Retry to book in {obj.get_search_freq()} seconds, total booking attempts: {object.get_attempts()}")
-            countdown_blocking(object.get_search_freq())
+            control.succ_attempts()
+            print(f"Retry to book in {obj.get_search_freq()} seconds, total booking attempts: {control.get_attempts()}")
+            countdown_blocking(control.get_search_freq())
         else:
-            print(booked[1].format(time_interval_string, object.get_location()))
+            print(booked[1].format(time_interval_string, control.get_location()))
 
 
 def countdown_blocking(value):
