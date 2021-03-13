@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect
+from flask import Flask, request, render_template, redirect, jsonify
 import json
 import sys
 from datetime import datetime, timedelta
@@ -31,9 +31,7 @@ all_bookings = sab.sort_and_order_bookinglist(
 )
 """
 
-with open("dat.json", "w") as f:
-    #all_bookings = json.load(f)
-    json.dump(data, f)
+data = pickle.load(open("data.p", "rb"))
 
 
 @app.context_processor
@@ -49,25 +47,27 @@ def index():
 # TODO.. Solve how to store data for each session, or just pass on data...Or dynamically update
 # to keep the data for the session.
 
-#obj.query_booking_sort()
+# obj.query_booking_sort()
 @app.route("/booking", methods=["POST", "GET"])
 def booking():
     if request.method == "GET":
-        if True:
-            return render_template(
-                "booking.html", title="Booking page", select="Facilities:", keys=all_bookings
-            )
+        return render_template(
+            "booking.html", title="Booking page", dir="/booking", select="Facilities:", keys=sorted(list(data)), loc=0
+        )
     elif request.method == "POST":
-        resdata = list(request.form)
-        #print(resdata[0] in list(all_bookings), file=sys.stderr)
+        resdata = dict(request.form)["0"]
+        print(resdata, file=sys.stderr)
         try:
-            if resdata[0] in obj.get_location_list():
-                # Test if there is another item in the list. Otherwise get 2nd item.
-                try:
-                    if 0 <= resdata[3] < len(object.get_all_timeslots(resdata[0])):
-                        pass
-                except:
-                    return
+            if resdata in list(data):
+                print(resdata, file=sys.stderr)
+                return render_template(
+                    "booking.html",
+                    title="Booking page",
+                    dir="/result",
+                    select="Time slot:",
+                    keys=list(data.get(resdata)),
+                    data=[dict(request.form)["0"]],
+                )
         except:
             pass
     return "404"
@@ -75,8 +75,18 @@ def booking():
 
 @app.route("/result", methods=["POST"])
 def result():
-    request.form
-    return render_template("index.html", title="Main index")
+    resdata = list(dict(request.form))
+    val = None
+    print(resdata, file=sys.stderr)
+    for i,_ in enumerate(resdata):
+        if resdata[i].isdigit():
+            val = int(resdata.pop(i))
+            break
+    loc = resdata[0]
+    timeslot = tuple(data.get(loc))[val]
+    timeslot_data = data.get(loc).get(timeslot)
+    obj.get_control().post_data(timeslot_data[1],logindata)
+    return render_template("index.html", title="Main index - success")
 
 
 if __name__ == "__main__":

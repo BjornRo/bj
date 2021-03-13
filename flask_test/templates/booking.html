@@ -6,14 +6,17 @@
 {% block content %}
 <h2>Booking page</h2>
 <h3>{{select}}</h3>
+<form action={{dir}} method="POST" enctype="application/json">
 {% for i,v in enumerate(keys) %}
-<form action="/booking" method="POST" enctype="application/JSON">
     <li>
-        <input type="submit" name="{{v}}" value="{{v}}">
-        <input type="hidden" name="{{i}}">
+        <input type="submit" name="{{i}}" value="{{v}}">
+        <input type="hidden" name="{{loc}}" value="{{v}}">
+        {% for j in data %}
+        <input type="hidden" name="{{j}}" value="{{j}}">
+        {%endfor%}
     </li>
-</form>
 {%endfor%}
+</form>
 
 
 {% endblock %}
