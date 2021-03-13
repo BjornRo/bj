@@ -14,6 +14,7 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Programming IS Math: f(g(h(x)))
 """
 
+from typing import Union
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -25,7 +26,7 @@ from datetime import datetime as dt, timedelta
 
 
 class QueryPost:
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str):
+    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, timeform=None):
         # Attempts for retrying.
         self.attempts = 0
         # timeslot = (location, day, selected_time)
@@ -39,6 +40,8 @@ class QueryPost:
         self.year, self.week, self.day = dt.now().isocalendar()
         # If Monday starts with 0 or 1. Adjust it.
         self.day += first_wkday_num - 1
+        # Timeform datetime: Example %H:%M | %H-%M
+        self.timeform = timeform
 
         # URL
         self.main_url = protocol + hostname
@@ -49,32 +52,39 @@ class QueryPost:
         # Usable data in dict form.
         self.data = {}
 
-    def query_site(self, query_arg: str, find_tag: str, tag_class: str):
+    def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> None:
         self._rawdata_buffer += BeautifulSoup(
             requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
         ).find_all(find_tag, class_=tag_class)
 
-    def set_timeout(self, timeout):
+    def set_timeout(self, timeout: int) -> None:
         self.timeout = timeout
 
-    def sort_data():
+    def clear_data(self) -> None:
+        self.data = {}
+
+    def get_data(self) -> dict:
+        return self.data
+
+    def get_timeform(self) -> str:
+        return self.timeform
+
+    def sort_data() -> bool:
         pass
 
-    def post_data():
+    def post_data() -> tuple(bool, str):
         pass
 
 
 class QueryPostSiteF(QueryPost):
     # To be a little more verbose, *args works as well
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str):
-        super().__init__(first_wkday_num, protocol, hostname, path)
-        self.timeform = "%H:%M"
-        self.time_regex = "[0-9]+:[0-9]+"
+    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, timeform: str):
+        super().__init__(first_wkday_num, protocol, hostname, path, timeform)
         day_succ = dt.now() + timedelta(days=1)
         self.queries = (query.format(self.year, self.week), query.format(day_succ.year, day_succ.isocalendar()[1]))
 
     # Query site
-    def query_booking_site(self) -> bool:
+    def query_site(self) -> bool:
         try:
             super().query_site(self.queries[0], "li", "day")
             if self.day == 6:
@@ -82,9 +92,6 @@ class QueryPostSiteF(QueryPost):
             return True
         except:
             return False
-
-    def clear_data(self):
-        self.data = {}
 
     def sort_data(self) -> bool:
         # Don't sort if buffer is empty or there exist data.
@@ -130,7 +137,7 @@ class QueryPostSiteF(QueryPost):
         self._rawdata_buffer = []
         return True
 
-    def post_data(self, booking_url, logindata):
+    def post_data(self, booking_url: str, logindata: dict) -> tuple:
         try:
             response = requests.get(booking_url, self.timeout)
         except:
@@ -172,18 +179,12 @@ class QueryPostSiteF(QueryPost):
                 pass
         return (False, "Error: Failed to send data.")
 
-    def get_data(self):
-        return self.data
-
-    def get_timeform(self):
-        return self.timeform
-
 
 # Thought of a facade pattern to make it easier to handle.
 # Might need some refactoring... Whatever... Strong dependency to QPSF. MC is a weak entity though.
 class MainController:
     def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq=90):
-        self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query)
+        self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query, "%H:%M")
         self.search_freq = search_freq
         self.days = {i + first_wkday_num: v for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])}
 
@@ -194,43 +195,40 @@ class MainController:
         self.timeslot = None
         self.timeslot_data = None
 
-    def get_allbookings(self):
-        return self.control.data
-
     def get_location_list(self) -> list:
         loc_keys = list(self.control.data)
         list.sort(loc_keys)
         return loc_keys
 
-    def query_booking_sort(self):
-        b = self.control.query_booking_site()
+    def query_booking_sort(self) -> bool:
+        b = self.control.query_site()
         if b:
             self.control.sort_data()
         return b
 
-    def post_data(self, link, logindata):
+    def post_data(self, link: str, logindata: dict) -> tuple:
         res = self.control.post_data(link, logindata)
         if res[0]:
             self.booked = True
         return res
 
-    def set_timeslot(self, timeslot):
+    def set_timeslot(self, timeslot: Union[dt, None]) -> None:
         self.timeslot = timeslot
 
-    def set_location(self, location):
+    def set_location(self, location: Union[str, None]) -> None:
         self.location = location
 
-    def get_location(self):
+    def get_location(self) -> Union[str, None]:
         return self.location
 
-    def get_timeslot(self):
+    def get_timeslot(self) -> Union[str, None]:
         return self.timeslot
 
     # Returns list for that particular location -> [("String", datetime, url_string)]
-    def get_slotlist_string(self, location=None):
+    def get_slotlist_string(self, location=None) -> Union[list, None]:
         loc = location if location else self.location
         if not loc:
-            return []
+            return None
 
         slot_strings = []
         slot_list = self.control.data.get(loc)
@@ -246,42 +244,42 @@ class MainController:
             slot_strings.append((to_print, t, item[1]))
         return slot_strings
 
-    def slot_time_interval(self, ts1=None, ts2=None) -> str:
+    def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
         t1 = ts1 if ts1 else self.timeslot
         t2 = ts2 if ts2 else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
         if not (t1 and t2):
-            return ""
+            return None
         return f"{dt.strftime(t1, self.control.timeform)}-{dt.strftime(t2, self.control.timeform)}"
 
-    def get_all_timeslots(self, location=None):
+    def get_all_timeslots(self, location=None) -> Union[tuple, None]:
         loc = location if location else self.location
         if not loc:
-            return ()
+            return None
         return tuple(self.control.data.get(loc))
 
-    def get_payload_dict(self):
+    def get_payload_dict(self) -> dict:
         return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
 
-    def get_booked(self):
+    def get_booked(self) -> bool:
         return self.booked
 
-    def get_timeslot_data(self, location=None, timeslot=None):
+    def get_timeslot_data(self, location=None, timeslot=None) -> Union[dt, None]:
         loc = location if location else self.location
         ts = timeslot if timeslot else self.timeslot
         if not (loc and ts):
             return None
         return self.control.data.get(loc).get(ts)
 
-    def get_attempts(self):
+    def get_attempts(self) -> int:
         return self.attempts
 
-    def succ_attempts(self):
+    def succ_attempts(self) -> None:
         self.attempts += 1
 
-    def get_search_freq(self):
+    def get_search_freq(self) -> int:
         return self.search_freq
 
-    def set_search_freq(self, search_freq):
+    def set_search_freq(self, search_freq: int) -> None:
         self.search_freq = search_freq
 
 
