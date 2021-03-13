@@ -26,22 +26,16 @@ from datetime import datetime as dt, timedelta
 
 
 class QueryPost:
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, timeform=None):
-        # Attempts for retrying.
-        self.attempts = 0
-        # timeslot = (location, day, selected_time)
-        self.timeslot = None
-        # Flag if object has successfully booked.
-        self.booked = False
-        # Timeout, default 10.
-        self.timeout = 10
-
+    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, timeform=None, timeout=10):
+        # Timeout for requests, default 10.
+        self.timeout = timeout
         # Time related
         self.year, self.week, self.day = dt.now().isocalendar()
         # If Monday starts with 0 or 1. Adjust it.
         self.day += first_wkday_num - 1
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
+        self.first_wkday_num = first_wkday_num
 
         # URL
         self.main_url = protocol + hostname
@@ -53,6 +47,8 @@ class QueryPost:
         self.data = {}
 
     def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> None:
+        # Always keep up to day.
+        self.day = dt.now().isocalendar()[2] + self.first_wkday_num - 1
         self._rawdata_buffer += BeautifulSoup(
             requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
         ).find_all(find_tag, class_=tag_class)
@@ -195,11 +191,6 @@ class MainController:
         self.timeslot = None
         self.timeslot_data = None
 
-    def get_location_list(self) -> list:
-        loc_keys = list(self.control.data)
-        list.sort(loc_keys)
-        return loc_keys
-
     def query_booking_sort(self) -> bool:
         b = self.control.query_site()
         if b:
@@ -212,17 +203,35 @@ class MainController:
             self.booked = True
         return res
 
-    def set_timeslot(self, timeslot: Union[dt, None]) -> None:
-        self.timeslot = timeslot
-
     def set_location(self, location: Union[str, None]) -> None:
         self.location = location
 
     def get_location(self) -> Union[str, None]:
         return self.location
 
+    def get_location_list(self) -> list:
+        loc_keys = list(self.control.data)
+        list.sort(loc_keys)
+        return loc_keys
+
+    def set_timeslot(self, timeslot: Union[dt, None]) -> None:
+        self.timeslot = timeslot
+
     def get_timeslot(self) -> Union[str, None]:
         return self.timeslot
+
+    def get_timeslot_data(self, location=None, timeslot=None) -> Union[dt, None]:
+        loc = location if location else self.location
+        ts = timeslot if timeslot else self.timeslot
+        if not (loc and ts):
+            return None
+        return self.control.data.get(loc).get(ts)
+
+    def get_all_timeslots(self, location=None) -> Union[tuple, None]:
+        loc = location if location else self.location
+        if not loc:
+            return None
+        return tuple(self.control.data.get(loc))
 
     # Returns list for that particular location -> [("String", datetime, url_string)]
     def get_slotlist_string(self, location=None) -> Union[list, None]:
@@ -251,24 +260,11 @@ class MainController:
             return None
         return f"{dt.strftime(t1, self.control.timeform)}-{dt.strftime(t2, self.control.timeform)}"
 
-    def get_all_timeslots(self, location=None) -> Union[tuple, None]:
-        loc = location if location else self.location
-        if not loc:
-            return None
-        return tuple(self.control.data.get(loc))
-
     def get_payload_dict(self) -> dict:
         return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
 
     def get_booked(self) -> bool:
         return self.booked
-
-    def get_timeslot_data(self, location=None, timeslot=None) -> Union[dt, None]:
-        loc = location if location else self.location
-        ts = timeslot if timeslot else self.timeslot
-        if not (loc and ts):
-            return None
-        return self.control.data.get(loc).get(ts)
 
     def get_attempts(self) -> int:
         return self.attempts
@@ -276,24 +272,11 @@ class MainController:
     def succ_attempts(self) -> None:
         self.attempts += 1
 
-    def get_search_freq(self) -> int:
-        return self.search_freq
-
     def set_search_freq(self, search_freq: int) -> None:
         self.search_freq = search_freq
 
-
-def p():
-    print("Hello there")
-
-
-def disable_win32_quickedit():
-    import ctypes
-
-    # Disable quickedit since it freezes the code.
-    if sys.platform == "win32":
-        kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
+    def get_search_freq(self) -> int:
+        return self.search_freq
 
 
 def get_user_input(offset_value: int, max_value: int):
@@ -307,10 +290,10 @@ def get_user_input(offset_value: int, max_value: int):
     elif user_input and user_input[0] in ["e", "q"]:
         sys.exit()
     print("Enter a valid input!")
-    return get_user_input(max_value)
+    return get_user_input(offset_value, max_value)
 
 
-def select_day_time(control: MainController):
+def select_day_time(control: MainController) -> Union[tuple, None]:
     # Manipulate data to get day_key into a list of elements.
     # ie {day: {datetime: (slot_data)}}: [datetime,...]
     print(f"Select your time for {control.get_location()}:")
@@ -325,7 +308,7 @@ def select_day_time(control: MainController):
     return all_timeslots[user_input]
 
 
-def select_location(loc_list):
+def select_location(loc_list: list) -> Union[str, None]:
     # Print all locations
     print("Select location:")
     print("  0: Exit")
@@ -337,7 +320,34 @@ def select_location(loc_list):
     return loc_list[user_input]
 
 
-# Example terminal. Follow same pattern for webapp.
+def p():
+    print("Hello there")
+
+
+def disable_win32_quickedit() -> None:
+    import ctypes
+
+    # Disable quickedit since it freezes the code.
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
+
+
+def countdown_blocking(value: int) -> None:
+    for i in range(value, -1, -1):
+        sys.stdout.write("\r")
+        sys.stdout.write(f" {i} seconds remaining.")
+        sys.stdout.flush()
+        time.sleep(-time.time() % 1)
+    sys.stdout.write("\r\n")
+    sys.stdout.flush()
+
+
+def load_json() -> dict:
+    with open(os.path.dirname(os.path.realpath(__file__)) + "\\data.json", "r") as f:
+        return json.load(f)
+
+
 def main(control: MainController, logindata):
     while not control.get_booked():
         # Check if request getting page is successful
@@ -378,23 +388,6 @@ def main(control: MainController, logindata):
             countdown_blocking(control.get_search_freq())
         else:
             print(booked[1].format(time_interval_string, control.get_location()))
-
-
-def countdown_blocking(value):
-    for i in range(value, -1, -1):
-        sys.stdout.write("\r")
-        sys.stdout.write(f" {i} seconds remaining.")
-        sys.stdout.flush()
-        time.sleep(-time.time() % 1)
-    sys.stdout.write("\r\n")
-    sys.stdout.flush()
-
-
-def load_json():
-    # Load JSON data
-    filepath = os.path.dirname(os.path.realpath(__file__)) + "\\data.json"
-    with open(filepath, "r") as f:
-        return json.load(f)
 
 
 if __name__ == "__main__":
