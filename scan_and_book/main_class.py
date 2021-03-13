@@ -68,7 +68,7 @@ class QueryPost:
     def sort_data() -> bool:
         pass
 
-    def post_data() -> tuple(bool, str):
+    def post_data() -> tuple:
         pass
 
 
