@@ -348,7 +348,7 @@ def main(control: MainController, logindata):
             # Select Booking slot
             while not control.get_timeslot():
                 control.set_location(select_location(control.get_location_list()))
-                if control.get_location() is None:
+                if not control.get_location():
                     return
                 control.set_timeslot(select_day_time(control))
 
