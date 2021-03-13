@@ -14,7 +14,6 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Programming IS Math: f(g(h(x)))
 """
 
-import enum
 import requests
 from bs4 import BeautifulSoup
 import re
