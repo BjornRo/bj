@@ -37,10 +37,10 @@ class QueryPost:
         # Time related
         self.time_now = datetime.now()
         _, self.week, self.wkday = self.time_now.isocalendar()
-        self.first_wkday_num = first_wkday_num
-        self.wkday += self.first_wkday_num - 1
+        self.wkday += first_wkday_num - 1
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
+        self.first_wkday_num = first_wkday_num
 
         # URL
         self.main_url = protocol + hostname
