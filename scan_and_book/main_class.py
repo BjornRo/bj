@@ -11,7 +11,10 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Very light "database"... few rows of JSON.
 * Some algorithms
 * Recursion on the user input! :D Wish Python had more haskell-like style though...
-* Programming IS Math: f(g(h(x)))
+* OOP
+
+TODO
+Add ABC and add some equivalent public/protected/private attrs/methods.
 """
 
 from typing import Union
@@ -22,7 +25,7 @@ import time
 import sys
 import os
 import json
-from datetime import datetime as dt, timedelta
+from datetime import datetime as datetime, timedelta
 
 
 class QueryPost:
@@ -32,7 +35,7 @@ class QueryPost:
         # Timeout for requests, default 10.
         self.timeout = timeout
         # Time related
-        self.year, self.week, self.day = None, None, None
+        self.time_now, self.week, self.wkday = datetime.now(), None, None
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
         self.first_wkday_num = first_wkday_num
@@ -48,9 +51,10 @@ class QueryPost:
         self.data = {}
 
     def update_time(self) -> None:
-        self.year, self.week, self.day = dt.now().isocalendar()
+        self.time_now = datetime.now()
+        _, self.week, self.wkday = self.time_now.isocalendar()
         # If Monday starts with 0 or 1. Adjust it.
-        self.day += self.first_wkday_num - 1
+        self.wkday += self.first_wkday_num - 1
 
     def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> bool:
         try:
@@ -79,6 +83,9 @@ class QueryPost:
     def post_data() -> tuple:
         pass
 
+    def flush_buffer(self) -> None:
+        # Clear the buffer. Clear can be used, but this program doesn't use identity for the list.
+        self._rawdata_buffer = []
 
 class QueryPostSiteF(QueryPost):
     # To be a little more verbose, *args works as well
@@ -88,32 +95,28 @@ class QueryPostSiteF(QueryPost):
 
     def update_time(self) -> None:
         super().update_time()
-        day_succ = dt.now() + timedelta(days=1)
-        self.queries = (
-            self.query.format(self.year, self.week),
-            self.query.format(day_succ.year, day_succ.isocalendar()[1]),
-        )
+        succ_yr, succ_wk, _ = (self.time_now + timedelta(days=1)).isocalendar()
+        self.queries = (self.query.format(self.time_now.year, self.week), self.query.format(succ_yr, succ_wk))
 
     # Query site
     def query_site(self) -> bool:
-        # Always keep up to day.
+        # Always keep up to wkday.
         self.update_time()
-        if super().query_site(self.queries[0], "li", "day"):
-            if self.day == 6 and super().query_site(self.queries[1], "li", "day"):
-                return True
-        return False
+        if (b := super().query_site(self.queries[0], "li", "day")) and self.wkday == 6:
+            b = super().query_site(self.queries[1], "li", "day")
+        return b
 
     def sort_data(self) -> bool:
         # Don't sort if buffer is empty or there exist data.
-        if not self._rawdata_buffer or self.data:
+        if not self._rawdata_buffer:
             return False
-        for i in range(self.day, self.day + 2):
-            bookday_list = self._rawdata_buffer[i].find_all("li")
+        #create new dict if there exist queried data
+        self.data = {}
 
-            # Pop uncessecary header
-            bookday_list.pop(0)
+        for i in range(self.wkday, self.wkday + 2):
+            bookday_list = self._rawdata_buffer[i].find_all("li")[1:]
 
-            # Add day to the dict
+            # Add wkday to the dict
             for j in bookday_list:
                 # Get booking url. IF time hasn't opened, then the url is none
                 booking_url = None
@@ -127,24 +130,25 @@ class QueryPostSiteF(QueryPost):
                 # Get "number" of slots, location and time
                 location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
                 slots = re.sub(" |:|\n|\r|[a-zåäö]+", "", j.find("div", class_="status").text.lower())
-                start_end = [x.split(":") for x in re.sub(" |\n|\r", "", j.find("div", class_="time").text).split("-")]
-                txs = [int(t) for subxs in start_end for t in subxs]
-                stime = dt(self.year, dt.now().month, dt.now().day, txs[0], txs[1]) + timedelta(days=(i - self.day))
-                end_time = stime.replace(hour=txs[2], minute=txs[3])
+                t_start_end_elem = [
+                    int(x) for x in re.split("[:-]", re.sub(" |\n|\r", "", j.find("div", class_="time").text))
+                ]
+                start_time = datetime(*self.time_now.timetuple()[:3], *t_start_end_elem[:2]) + timedelta(
+                    days=(i - self.wkday)
+                )
+                end_time = start_time.replace(hour=t_start_end_elem[2], minute=t_start_end_elem[3])
 
                 # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-                if slots == "0" and (stime - dt.now()) <= timedelta(hours=2):
+                if slots == "0" and (start_time - self.time_now) <= timedelta(hours=2):
                     continue
 
-                # If current location doesn't exist, and day, add an empty dict
+                # If current location doesn't exist, and wkday, add an empty dict
                 if not self.data.get(location):
                     self.data[location] = {}
 
                 # Add booking_url and number of slots to the list.
                 # Keys: Location, WeekDay, start DateTime
-                self.data[location][stime] = (end_time, booking_url, slots)
-        # Clear the buffer
-        self._rawdata_buffer = []
+                self.data[location][start_time] = (end_time, booking_url, slots)
         return True
 
     def post_data(self, booking_url: str, logindata: dict) -> tuple:
@@ -206,14 +210,13 @@ class MainController:
         self.timeslot_data = None
 
     def query_booking_sort(self) -> bool:
-        b = self.control.query_site()
-        if b:
-            self.control.sort_data()
+        if (b := self.control.query_site()):
+            if (b := self.control.sort_data()):
+                self.control.flush_buffer()
         return b
 
     def post_data(self, link: str, logindata: dict) -> tuple:
-        res = self.control.post_data(link, logindata)
-        if res[0]:
+        if (res := self.control.post_data(link, logindata)):
             self.booked = True
         return res
 
@@ -228,13 +231,13 @@ class MainController:
         list.sort(loc_keys)
         return loc_keys
 
-    def set_timeslot(self, timeslot: Union[dt, None]) -> None:
+    def set_timeslot(self, timeslot: Union[datetime, None]) -> None:
         self.timeslot = timeslot
 
     def get_timeslot(self) -> Union[str, None]:
         return self.timeslot
 
-    def get_timeslot_data(self, location=None, timeslot=None) -> Union[dt, None]:
+    def get_timeslot_data(self, location=None, timeslot=None) -> Union[datetime, None]:
         loc = location if location else self.location
         ts = timeslot if timeslot else self.timeslot
         if not (loc and ts):
@@ -272,7 +275,7 @@ class MainController:
         t2 = ts2 if ts2 else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
         if not (t1 and t2):
             return None
-        return f"{dt.strftime(t1, self.control.timeform)}-{dt.strftime(t2, self.control.timeform)}"
+        return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
 
     def get_payload_dict(self) -> dict:
         return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
@@ -309,7 +312,7 @@ def get_user_input(offset_value: int, max_value: int):
 
 def select_day_time(control: MainController) -> Union[tuple, None]:
     # Manipulate data to get day_key into a list of elements.
-    # ie {day: {datetime: (slot_data)}}: [datetime,...]
+    # ie {wkday: {datetime: (slot_data)}}: [datetime,...]
     print(f"Select your time for {control.get_location()}:")
     print("  0: Return to select location")
     for i, t in enumerate(control.get_slotlist_string()):
@@ -363,6 +366,7 @@ def load_json() -> dict:
 
 
 def main(control: MainController, logindata):
+    booked = (False, "")
     while not control.get_booked():
         # Check if request getting page is successful
         if control.query_booking_sort():
@@ -383,7 +387,7 @@ def main(control: MainController, logindata):
             # Then continue to query the booking again also to get a link.
             time_interval_string = control.slot_time_interval()
             if not control.get_timeslot_data()[1]:
-                sleep_time = (control.get_timeslot() - dt.now()).total_seconds() + 20
+                sleep_time = (control.get_timeslot() - datetime.now()).total_seconds() + 20
                 print(
                     f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {control.get_location()}:"
                 )
@@ -397,6 +401,9 @@ def main(control: MainController, logindata):
                 booked = control.post_data(control.get_timeslot_data()[1], logindata)
 
         if not booked[0]:
+            if booked[1]:
+                print(booked[1])
+                return
             control.succ_attempts()
             print(f"Retry to book in {obj.get_search_freq()} seconds, total booking attempts: {control.get_attempts()}")
             countdown_blocking(control.get_search_freq())
