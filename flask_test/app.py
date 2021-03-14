@@ -23,7 +23,9 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 dat = sab.load_json()
 logindata = {"username": dat["login"]["username"], "password": dat["login"]["password"]}
 
-obj = MainController(0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"])
+obj = MainController(
+    0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"]
+)
 validation_str = dat["site"]["validate"]
 # obj.query_booking_sort()
 
@@ -51,7 +53,11 @@ def booking():
         obj.query_booking_sort()
         payload = obj.get_payload_dict()
         return render_template(
-            "booking.html", title="Booking page", dir="/booking", select="Facilities:", payload=payload
+            "booking.html",
+            title="Booking page",
+            dir="/booking",
+            select="Facilities:",
+            payload=payload,
         )
     elif request.method == "POST":
         formdata = dict(request.form)

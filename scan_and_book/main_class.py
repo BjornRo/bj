@@ -13,8 +13,6 @@ Tried to implement what I've learnt from Computer Science courses so far.
 * Recursion on the user input! :D Wish Python had more haskell-like style though...
 * OOP
 
-TODO
-Add ABC and add some equivalent public/protected/private attrs/methods.
 """
 
 from typing import Union
@@ -30,7 +28,14 @@ from datetime import datetime as datetime, timedelta
 
 class QueryPost:
     def __init__(
-        self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, timeform=None, timeout=10
+        self,
+        first_wkday_num: int,
+        protocol: str,
+        hostname: str,
+        path: str,
+        query: str,
+        timeform=None,
+        timeout=10,
     ):
         # Timeout for requests, default 10.
         self.timeout = timeout
@@ -94,22 +99,35 @@ class QueryPost:
         self._rawdata_buffer = []
         self._buffer_full = False
 
+
 class QueryPostSiteF(QueryPost):
     # To be a little more verbose, *args works as well
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, timeform: str):
+    def __init__(
+        self,
+        first_wkday_num: int,
+        protocol: str,
+        hostname: str,
+        path: str,
+        query: str,
+        timeform: str,
+    ):
         super().__init__(first_wkday_num, protocol, hostname, path, query, timeform)
         self.queries = None
 
     def update_time(self) -> None:
         super().update_time()
         succ_yr, succ_wk, _ = (self.time_now + timedelta(days=1)).isocalendar()
-        self.queries = (self.query.format(self.time_now.year, self.week), self.query.format(succ_yr, succ_wk))
+        self.queries = (
+            self.query.format(self.time_now.year, self.week),
+            self.query.format(succ_yr, succ_wk),
+        )
 
     # Query site
     def query_site(self) -> bool:
         # Always keep up to wkday.
         self.update_time()
-        if (b := super().query_site(self.queries[0], "li", "day")) and self.wkday == 6:
+        b = super().query_site(self.queries[0], "li", "day")
+        if b and self.wkday == 6:
             self._buffer_full = False
             b = super().query_site(self.queries[1], "li", "day")
         return b
@@ -128,21 +146,29 @@ class QueryPostSiteF(QueryPost):
                 booking_url = None
                 # If there is no message, then there exist a link. Add the link.
                 if not j.find("span", class_="message"):
-                    booking_url = self.main_url + j.find("div", class_="button-holder").find("a")["href"]
+                    booking_url = (
+                        self.main_url + j.find("div", class_="button-holder").find("a")["href"]
+                    )
                 # Check status of the booking activity. OR If there is a message then you can't book
-                elif "inactive" in j["class"] or "drop" in j.find("span", class_="message").text.lower():
+                elif (
+                    "inactive" in j["class"]
+                    or "drop" in j.find("span", class_="message").text.lower()
+                ):
                     continue
 
                 # Get "number" of slots, location and time
                 location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-                slots = re.sub(" |:|\n|\r|[a-zåäö]+", "", j.find("div", class_="status").text.lower())
-                t_start_end_elem = [
-                    int(x) for x in re.split("[:-]", re.sub(" |\n|\r", "", j.find("div", class_="time").text))
-                ]
-                start_time = datetime(*self.time_now.timetuple()[:3], *t_start_end_elem[:2]) + timedelta(
-                    days=(i - self.wkday)
+                slots = re.sub(
+                    " |:|\n|\r|[a-zåäö]+", "", j.find("div", class_="status").text.lower()
                 )
-                end_time = start_time.replace(hour=t_start_end_elem[2], minute=t_start_end_elem[3])
+                t_start_end_elem = [
+                    dict(zip(["hour", "minute"], map(int, t.split(":"))))
+                    for t in re.sub(" |\n|\r", "", j.find("div", class_="time").text).split("-")
+                ]
+                start_time = datetime(
+                    *self.time_now.timetuple()[:3], **t_start_end_elem[0]
+                ) + timedelta(days=(i - self.wkday))
+                end_time = start_time.replace(**t_start_end_elem[1])
 
                 # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
                 if slots == "0" and (start_time - self.time_now) <= timedelta(hours=2):
@@ -182,7 +208,9 @@ class QueryPostSiteF(QueryPost):
             try:
                 sent = requests.post(self.main_url + soup_response["action"], data=payload)
                 if sent:
-                    booking_status_soup = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
+                    booking_status_soup = BeautifulSoup(sent.content, "html.parser").find(
+                        "p", class_="error"
+                    )
                     # Check if the post returned error. If no error, then the statement evaluates as None.
                     if not booking_status_soup:
                         return (True, "Successfully booked {} at {}")
@@ -203,10 +231,21 @@ class QueryPostSiteF(QueryPost):
 # Thought of a facade pattern to make it easier to handle.
 # Might need some refactoring... Whatever... Strong dependency to QPSF. MC is a weak entity though.
 class MainController:
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, search_freq=90):
+    def __init__(
+        self,
+        first_wkday_num: int,
+        protocol: str,
+        hostname: str,
+        path: str,
+        query: str,
+        search_freq=90,
+    ):
         self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query, "%H:%M")
         self.search_freq = search_freq
-        self.days = {i + first_wkday_num: v for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])}
+        self.days = {
+            i + first_wkday_num: v
+            for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+        }
 
         # Data
         self.attempts = 0
@@ -216,13 +255,14 @@ class MainController:
         self.timeslot_data = None
 
     def query_booking_sort(self) -> bool:
-        if (b := self.control.query_site()):
-            if (b := self.control.sort_data()):
-                self.control.flush_buffer()
-        return b
+        if self.control.query_site() and self.control.sort_data():
+            self.control.flush_buffer()
+            return True
+        return False
 
     def post_data(self, link: str, logindata: dict) -> tuple:
-        if (res := self.control.post_data(link, logindata)):
+        res = self.control.post_data(link, logindata)
+        if res[0]:
             self.booked = True
         return res
 
@@ -268,7 +308,9 @@ class MainController:
 
         for t in slot_keys:
             item = slot_list.get(t)
-            to_print = f"{self.days.get(t.weekday())}, {self.slot_time_interval(t, item[0])}, slots:"
+            to_print = (
+                f"{self.days.get(t.weekday())}, {self.slot_time_interval(t, item[0])}, slots:"
+            )
             if item[1]:
                 to_print += " " + item[2]
             else:
@@ -278,7 +320,11 @@ class MainController:
 
     def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
         t1 = ts1 if ts1 else self.timeslot
-        t2 = ts2 if ts2 else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
+        t2 = (
+            ts2
+            if ts2
+            else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
+        )
         if not (t1 and t2):
             return None
         return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
@@ -351,7 +397,9 @@ def disable_win32_quickedit() -> None:
     # Disable quickedit since it freezes the code.
     if sys.platform == "win32":
         kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100))
+        kernel32.SetConsoleMode(
+            kernel32.GetStdHandle(-10), (0x4 | 0x80 | 0x20 | 0x2 | 0x10 | 0x1 | 0x00 | 0x100)
+        )
 
 
 def countdown_blocking(value: int) -> None:
@@ -409,7 +457,9 @@ def main(control: MainController, logindata):
                 print(booked[1])
                 return
             control.succ_attempts()
-            print(f"Retry to book in {obj.get_search_freq()} seconds, total booking attempts: {control.get_attempts()}")
+            print(
+                f"Retry to book in {obj.get_search_freq()} seconds, total booking attempts: {control.get_attempts()}"
+            )
             countdown_blocking(control.get_search_freq())
         else:
             print(booked[1].format(time_interval_string, control.get_location()))
@@ -423,7 +473,13 @@ if __name__ == "__main__":
     logindata = {"username": dat["login"]["username"], "password": dat["login"]["password"]}
 
     # Create object
-    obj = MainController(0, dat["site"]["protocol"], dat["site"]["hostname"], dat["site"]["path"], dat["site"]["query"])
+    obj = MainController(
+        0,
+        dat["site"]["protocol"],
+        dat["site"]["hostname"],
+        dat["site"]["path"],
+        dat["site"]["query"],
+    )
 
     try:
         if sys.argv[1].isdigit() and 0 < int(sys.argv[1]):
