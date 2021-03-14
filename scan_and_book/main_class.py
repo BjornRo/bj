@@ -35,10 +35,12 @@ class QueryPost:
         # Timeout for requests, default 10.
         self.timeout = timeout
         # Time related
-        self.time_now, self.week, self.wkday = datetime.now(), None, None
+        self.time_now = datetime.now()
+        _, self.week, self.wkday = self.time_now.isocalendar()
+        self.first_wkday_num = first_wkday_num
+        self.wkday += self.first_wkday_num - 1
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
-        self.first_wkday_num = first_wkday_num
 
         # URL
         self.main_url = protocol + hostname
@@ -46,6 +48,7 @@ class QueryPost:
         self.query = query
 
         # Data-related
+        self._buffer_full = False
         self._rawdata_buffer = []
         # Usable data in dict form.
         self.data = {}
@@ -57,13 +60,16 @@ class QueryPost:
         self.wkday += self.first_wkday_num - 1
 
     def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> bool:
-        try:
-            self._rawdata_buffer += BeautifulSoup(
-                requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
-            ).find_all(find_tag, class_=tag_class)
-            return True
-        except:
-            return False
+        if not self._buffer_full:
+            try:
+                self._rawdata_buffer += BeautifulSoup(
+                    requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
+                ).find_all(find_tag, class_=tag_class)
+                self._buffer_full = True
+                return True
+            except:
+                pass
+        return False
 
     def set_timeout(self, timeout: int) -> None:
         self.timeout = timeout
@@ -86,6 +92,7 @@ class QueryPost:
     def flush_buffer(self) -> None:
         # Clear the buffer. Clear can be used, but this program doesn't use identity for the list.
         self._rawdata_buffer = []
+        self._buffer_full = False
 
 class QueryPostSiteF(QueryPost):
     # To be a little more verbose, *args works as well
@@ -103,6 +110,7 @@ class QueryPostSiteF(QueryPost):
         # Always keep up to wkday.
         self.update_time()
         if (b := super().query_site(self.queries[0], "li", "day")) and self.wkday == 6:
+            self._buffer_full = False
             b = super().query_site(self.queries[1], "li", "day")
         return b
 
@@ -110,8 +118,6 @@ class QueryPostSiteF(QueryPost):
         # Don't sort if buffer is empty or there exist data.
         if not self._rawdata_buffer:
             return False
-        #create new dict if there exist queried data
-        self.data = {}
 
         for i in range(self.wkday, self.wkday + 2):
             bookday_list = self._rawdata_buffer[i].find_all("li")[1:]
