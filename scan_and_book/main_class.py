@@ -26,13 +26,13 @@ from datetime import datetime as dt, timedelta
 
 
 class QueryPost:
-    def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, timeform=None, timeout=10):
+    def __init__(
+        self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, timeform=None, timeout=10
+    ):
         # Timeout for requests, default 10.
         self.timeout = timeout
         # Time related
-        self.year, self.week, self.day = dt.now().isocalendar()
-        # If Monday starts with 0 or 1. Adjust it.
-        self.day += first_wkday_num - 1
+        self.year, self.week, self.day = None, None, None
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
         self.first_wkday_num = first_wkday_num
@@ -40,18 +40,26 @@ class QueryPost:
         # URL
         self.main_url = protocol + hostname
         self.query_url = self.main_url + path
+        self.query = query
 
         # Data-related
         self._rawdata_buffer = []
         # Usable data in dict form.
         self.data = {}
 
-    def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> None:
-        # Always keep up to day.
-        self.day = dt.now().isocalendar()[2] + self.first_wkday_num - 1
-        self._rawdata_buffer += BeautifulSoup(
-            requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
-        ).find_all(find_tag, class_=tag_class)
+    def update_time(self) -> None:
+        self.year, self.week, self.day = dt.now().isocalendar()
+        # If Monday starts with 0 or 1. Adjust it.
+        self.day += self.first_wkday_num - 1
+
+    def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> bool:
+        try:
+            self._rawdata_buffer += BeautifulSoup(
+                requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
+            ).find_all(find_tag, class_=tag_class)
+            return True
+        except:
+            return False
 
     def set_timeout(self, timeout: int) -> None:
         self.timeout = timeout
@@ -75,19 +83,25 @@ class QueryPost:
 class QueryPostSiteF(QueryPost):
     # To be a little more verbose, *args works as well
     def __init__(self, first_wkday_num: int, protocol: str, hostname: str, path: str, query: str, timeform: str):
-        super().__init__(first_wkday_num, protocol, hostname, path, timeform)
+        super().__init__(first_wkday_num, protocol, hostname, path, query, timeform)
+        self.queries = None
+
+    def update_time(self) -> None:
+        super().update_time()
         day_succ = dt.now() + timedelta(days=1)
-        self.queries = (query.format(self.year, self.week), query.format(day_succ.year, day_succ.isocalendar()[1]))
+        self.queries = (
+            self.query.format(self.year, self.week),
+            self.query.format(day_succ.year, day_succ.isocalendar()[1]),
+        )
 
     # Query site
     def query_site(self) -> bool:
-        try:
-            super().query_site(self.queries[0], "li", "day")
-            if self.day == 6:
-                super().query_site(self.queries[1], "li", "day")
-            return True
-        except:
-            return False
+        # Always keep up to day.
+        self.update_time()
+        if super().query_site(self.queries[0], "li", "day"):
+            if self.day == 6 and super().query_site(self.queries[1], "li", "day"):
+                return True
+        return False
 
     def sort_data(self) -> bool:
         # Don't sort if buffer is empty or there exist data.
