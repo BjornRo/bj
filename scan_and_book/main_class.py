@@ -311,8 +311,6 @@ def get_user_input(offset_value: int, max_value: int):
 
 
 def select_day_time(control: MainController) -> Union[tuple, None]:
-    # Manipulate data to get day_key into a list of elements.
-    # ie {wkday: {datetime: (slot_data)}}: [datetime,...]
     print(f"Select your time for {control.get_location()}:")
     print("  0: Return to select location")
     for i, t in enumerate(control.get_slotlist_string()):
