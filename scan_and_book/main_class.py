@@ -89,14 +89,13 @@ class QueryPost:
         return self.timeform
 
     def sort_data() -> bool:
-        pass
+        raise NotImplementedError
 
     def post_data() -> tuple:
-        pass
+        raise NotImplementedError
 
     def flush_buffer(self) -> None:
-        # Clear the buffer. Clear can be used, but this program doesn't use identity for the list.
-        self._rawdata_buffer = []
+        self._rawdata_buffer.clear()
         self._buffer_full = False
 
 
@@ -143,19 +142,15 @@ class QueryPostSiteF(QueryPost):
             # Add wkday to the dict
             for j in bookday_list:
                 # Get booking url. IF time hasn't opened, then the url is none
-                booking_url = None
+                url = None
                 # If there is no message, then there exist a link. Add the link.
                 if not j.find("span", class_="message"):
-                    booking_url = (
-                        self.main_url + j.find("div", class_="button-holder").find("a")["href"]
-                    )
+                    url = self.main_url + j.find("div", class_="button-holder").find("a")["href"]
                 # Check status of the booking activity. OR If there is a message then you can't book
-                elif (
-                    "inactive" in j["class"]
-                    or "drop" in j.find("span", class_="message").text.lower()
+                elif "inactive" in j["class"] or re.search(
+                    "drop", j.find("span", class_="message").text, re.I
                 ):
                     continue
-                # j.find("div", class_="time").find_next().text
                 # Get "number" of slots, location and time
                 location = re.sub("\(|\)", "", j.find("div", class_="location").text.strip())
                 slots = re.sub("[^>0-9]", "", j.find("div", class_="status").text)
@@ -178,7 +173,7 @@ class QueryPostSiteF(QueryPost):
 
                 # Add booking_url and number of slots to the list.
                 # Keys: Location, WeekDay, start DateTime
-                self.data[location][start_time] = (end_time, booking_url, slots)
+                self.data[location][start_time] = (end_time, url, slots)
         return True
 
     def post_data(self, booking_url: str, logindata: dict) -> tuple:
@@ -206,15 +201,12 @@ class QueryPostSiteF(QueryPost):
             try:
                 sent = requests.post(self.main_url + soup_response["action"], data=payload)
                 if sent:
-                    booking_status_soup = BeautifulSoup(sent.content, "html.parser").find(
-                        "p", class_="error"
-                    )
+                    error_msg = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
                     # Check if the post returned error. If no error, then the statement evaluates as None.
-                    if not booking_status_soup:
+                    if not error_msg:
                         return (True, "Successfully booked {} at {}")
                     else:
-                        print(booking_status_soup, file=sys.stderr)
-                        error_code = booking_status_soup.text.strip().replace(" ","").lower()
+                        error_code = re.sub(" ", "", error_msg.text.strip()).lower()
                         if "maxantalbokningar" in error_code:
                             return (True, "Error: Already booked {} at {}")
                         elif "felaktigt" in error_code:
