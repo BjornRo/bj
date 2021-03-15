@@ -146,7 +146,7 @@ class QueryPostSiteF(QueryPost):
                 # If there is no message, then there exist a link. Add the link.
                 if not j.find("span", class_="message"):
                     url = self.main_url + j.find("div", class_="button-holder").find("a")["href"]
-                # Check status of the booking activity. OR If there is a message then you can't book
+                # Check status, if neither are true: then booking slot hasn't unlocked yet.
                 elif "inactive" in j["class"] or re.search(
                     "drop", j.find("span", class_="message").text, re.I
                 ):
