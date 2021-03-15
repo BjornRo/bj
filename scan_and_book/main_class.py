@@ -155,15 +155,13 @@ class QueryPostSiteF(QueryPost):
                     or "drop" in j.find("span", class_="message").text.lower()
                 ):
                     continue
-
+                # j.find("div", class_="time").find_next().text
                 # Get "number" of slots, location and time
-                location = re.sub("\n|\r|\(|\)", "", j.find("div", class_="location").text.strip())
-                slots = re.sub(
-                    " |:|\n|\r|[a-zåäö]+", "", j.find("div", class_="status").text.lower()
-                )
+                location = re.sub("\(|\)", "", j.find("div", class_="location").text.strip())
+                slots = re.sub("[^>0-9]", "", j.find("div", class_="status").text)
                 t_start_end_elem = [
-                    dict(zip(["hour", "minute"], map(int, t.split(":"))))
-                    for t in re.sub(" |\n|\r", "", j.find("div", class_="time").text).split("-")
+                    dict(zip(("hour", "minute"), map(int, t)))
+                    for t in re.findall("(\d+):(\d+)", j.find("div", class_="time").text)
                 ]
                 start_time = datetime(
                     *self.time_now.timetuple()[:3], **t_start_end_elem[0]
@@ -216,10 +214,10 @@ class QueryPostSiteF(QueryPost):
                         return (True, "Successfully booked {} at {}")
                     else:
                         print(booking_status_soup, file=sys.stderr)
-                        error_code = re.sub(" |\r|\n", "", booking_status_soup.text).lower()
-                        if re.match(".+?maxantalbokningar", error_code):
+                        error_code = booking_status_soup.text.strip().replace(" ","").lower()
+                        if "maxantalbokningar" in error_code:
                             return (True, "Error: Already booked {} at {}")
-                        elif re.search("felaktigt", error_code):
+                        elif "felaktigt" in error_code:
                             return (False, "Error: Wrong username or password.")
                         else:
                             return (False, "Error: Failed to book.")
