@@ -23,7 +23,7 @@ import time
 import sys
 import os
 import json
-from datetime import datetime as datetime, timedelta
+from datetime import datetime, timedelta
 
 
 class QueryPost:
@@ -41,7 +41,7 @@ class QueryPost:
         self.timeout = timeout
         # Time related
         self.time_now = datetime.now()
-        _, self.week, self.wkday = self.time_now.isocalendar()
+        self.year, self.week, self.wkday = self.time_now.isocalendar()
         self.wkday += first_wkday_num - 1
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
@@ -60,7 +60,7 @@ class QueryPost:
 
     def update_time(self) -> None:
         self.time_now = datetime.now()
-        _, self.week, self.wkday = self.time_now.isocalendar()
+        self.year, self.week, self.wkday = self.time_now.isocalendar()
         # If Monday starts with 0 or 1. Adjust it.
         self.wkday += self.first_wkday_num - 1
 
@@ -115,16 +115,15 @@ class QueryPostSiteF(QueryPost):
 
     def update_time(self) -> None:
         super().update_time()
-        succ_yr, succ_wk, _ = (self.time_now + timedelta(days=1)).isocalendar()
-        self.queries = (
-            self.query.format(self.time_now.year, self.week),
-            self.query.format(succ_yr, succ_wk),
-        )
 
     # Query site
     def query_site(self) -> bool:
         # Always keep up to wkday.
         self.update_time()
+        self.queries = (
+            self.query.format(self.year, self.week),
+            self.query.format(*(self.time_now + timedelta(days=1)).isocalendar()[:2]),
+        )
         b = super().query_site(self.queries[0], "li", "day")
         if b and self.wkday == 6:
             self._buffer_full = False
@@ -152,7 +151,9 @@ class QueryPostSiteF(QueryPost):
                 ):
                     continue
                 # Get "number" of slots, location and time
-                location = re.sub("\(|\)", "", j.find("div", class_="location").text.strip())
+                location = re.sub(
+                    ".*\(|\).*", "", j.find("div", class_="location").text, flags=re.S
+                )
                 slots = re.sub("[^>0-9]", "", j.find("div", class_="status").text)
                 t_start_end_elem = [
                     dict(zip(("hour", "minute"), map(int, t)))
