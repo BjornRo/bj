@@ -169,9 +169,7 @@ class QueryPostSiteF(QueryPost):
                 if not self.data.get(location):
                     self.data[location] = {}
 
-                # Add booking_url and number of slots to the list.
-                # Keys: Location, WeekDay, start DateTime
-                self.data[location][start_time] = (end_time, url, slots)
+                self.data[location][start_time] = {"end_time": end_time, "url": url, "slots": slots}
         return True
 
     def post_data(self, booking_url: str, logindata: dict) -> tuple:
@@ -271,7 +269,7 @@ class MainController:
     def get_timeslot(self) -> Union[str, None]:
         return self.timeslot
 
-    def get_timeslot_data(self, location=None, timeslot=None) -> Union[datetime, None]:
+    def get_timeslot_data(self, location=None, timeslot=None) -> Union[dict, None]:
         loc = location if location else self.location
         ts = timeslot if timeslot else self.timeslot
         if not (loc and ts):
@@ -291,20 +289,16 @@ class MainController:
             return None
 
         slot_strings = []
-        for k_dt, (v_dt, url, slots) in self.control.data.get(loc).items():
-            natural_day_name = self.days.get(k_dt.weekday() + self.control.first_wkday_num)
-            to_print = f"{natural_day_name}, {self.slot_time_interval(k_dt, v_dt)}, slots: "
-            to_print += slots if url else "not unlocked"
-            slot_strings.append((to_print, k_dt, url))
+        for k_dt, v_dict in self.control.data.get(loc).items():
+            end_dt, url, slots = v_dict.values()
+            dayname = self.days.get(k_dt.weekday() + self.control.first_wkday_num)
+            p_str = f"{dayname}, {self.slot_time_interval(k_dt, end_dt)}, slots: {slots if url else 'not unlocked'}"
+            slot_strings.append((p_str, k_dt, url))
         return slot_strings
 
     def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
         t1 = ts1 if ts1 else self.timeslot
-        t2 = (
-            ts2
-            if ts2
-            else (self.get_timeslot_data()[0] if self.location and self.timeslot else None)
-        )
+        t2 = ts2 if ts2 else self.get_timeslot_data().get("end_time")
         if not (t1 and t2):
             return None
         return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
@@ -402,7 +396,7 @@ def main(control: MainController, logindata):
     while not control.get_booked():
         # Check if request getting page is successful
         if control.query_booking_sort():
-            # Select Booking slot
+            # Select time slot for booking. If selected None = Exit program.
             while not control.get_timeslot():
                 control.set_location(select_location(control.get_location_list()))
                 if not control.get_location():
@@ -410,15 +404,13 @@ def main(control: MainController, logindata):
                 control.set_timeslot(select_day_time(control))
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
-            # timeslot = selected_time
-            # timeslot_data = (endtime, link = (None | Str), slots)
             if not control.get_timeslot_data():
                 return print("Selected location and time is unavailable, stopping")
 
             # If Link is None, then wait until there are less or equal to 24h to that slot.
             # Then continue to query the booking again also to get a link.
             time_interval_string = control.slot_time_interval()
-            if not control.get_timeslot_data()[1]:
+            if not control.get_timeslot_data()["url"]:
                 sleep_time = (control.get_timeslot() - datetime.now()).total_seconds() + 20
                 print(
                     f"Sleeping for {sleep_time} seconds to try to book {time_interval_string} at {control.get_location()}:"
@@ -427,10 +419,10 @@ def main(control: MainController, logindata):
                 print("Trying to book.")
                 continue
 
-            if control.get_timeslot_data()[2] == "0":
+            if control.get_timeslot_data()["slots"] == "0":
                 print("No slots available...")
             else:
-                booked = control.post_data(control.get_timeslot_data()[1], logindata)
+                booked = control.post_data(control.get_timeslot_data()["url"], logindata)
 
         if not booked[0]:
             if booked[1]:
