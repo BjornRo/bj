@@ -116,17 +116,17 @@ class QueryPostSiteF(QueryPost):
         super().update_time()
 
     # Query site
-    def query_site(self) -> bool:
+    def query_site_with_args(self) -> bool:
         # Always keep up to wkday.
         self.update_time()
         self.queries = (
             self.query.format(self.year, self.week),
             self.query.format(*(self.time_now + timedelta(days=1)).isocalendar()[:2]),
         )
-        b = super().query_site(self.queries[0], "li", "day")
+        b = self.query_site(self.queries[0], "li", "day")
         if b and self.wkday == (6 + self.first_wkday_num):
             self._buffer_full = False
-            b = super().query_site(self.queries[1], "li", "day")
+            b = self.query_site(self.queries[1], "li", "day")
         return b
 
     def sort_data(self) -> bool:
@@ -243,7 +243,7 @@ class MainController:
         self.timeslot_data = None
 
     def query_booking_sort(self) -> bool:
-        if self.control.query_site() and self.control.sort_data():
+        if self.control.query_site_with_args() and self.control.sort_data():
             self.control.flush_buffer()
             return True
         return False
