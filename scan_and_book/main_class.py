@@ -41,8 +41,8 @@ class QueryPost:
         self.timeout = timeout
         # Time related
         self.time_now = datetime.now()
-        self.year, self.week, self.wkday = self.time_now.isocalendar()
-        self.wkday += first_wkday_num - 1
+        self.year, self.week, _ = self.time_now.isocalendar()
+        self.wkday = self.time_now.weekday() + first_wkday_num
         # Timeform datetime: Example %H:%M | %H-%M
         self.timeform = timeform
         self.first_wkday_num = first_wkday_num
@@ -60,9 +60,8 @@ class QueryPost:
 
     def update_time(self) -> None:
         self.time_now = datetime.now()
-        self.year, self.week, self.wkday = self.time_now.isocalendar()
-        # If Monday starts with 0 or 1. Adjust it.
-        self.wkday += self.first_wkday_num - 1
+        self.year, self.week, _ = self.time_now.isocalendar()
+        self.wkday = self.time_now.weekday() + self.first_wkday_num
 
     def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> bool:
         if not self._buffer_full:
@@ -125,7 +124,7 @@ class QueryPostSiteF(QueryPost):
             self.query.format(*(self.time_now + timedelta(days=1)).isocalendar()[:2]),
         )
         b = super().query_site(self.queries[0], "li", "day")
-        if b and self.wkday == 6:
+        if b and self.wkday == (6 + self.first_wkday_num):
             self._buffer_full = False
             b = super().query_site(self.queries[1], "li", "day")
         return b
@@ -136,10 +135,8 @@ class QueryPostSiteF(QueryPost):
             return False
 
         for i in range(self.wkday, self.wkday + 2):
-            bookday_list = self._rawdata_buffer[i].find_all("li")[1:]
-
-            # Add wkday to the dict
-            for j in bookday_list:
+            # Add all slots for the day and next day to the dict
+            for j in self._rawdata_buffer[i].find_all("li")[1:]:
                 # Get booking url. IF time hasn't opened, then the url is none
                 url = None
                 # If there is no message, then there exist a link. Add the link.
@@ -294,19 +291,11 @@ class MainController:
             return None
 
         slot_strings = []
-        slot_list = self.control.data.get(loc)
-        slot_keys = tuple(slot_list)
-
-        for t in slot_keys:
-            item = slot_list.get(t)
-            to_print = (
-                f"{self.days.get(t.weekday())}, {self.slot_time_interval(t, item[0])}, slots:"
-            )
-            if item[1]:
-                to_print += " " + item[2]
-            else:
-                to_print += " not unlocked"
-            slot_strings.append((to_print, t, item[1]))
+        for k_dt, (v_dt, url, slots) in self.control.data.get(loc).items():
+            natural_day_name = self.days.get(k_dt.weekday() + self.control.first_wkday_num)
+            to_print = f"{natural_day_name}, {self.slot_time_interval(k_dt, v_dt)}, slots: "
+            to_print += slots if url else "not unlocked"
+            slot_strings.append((to_print, k_dt, url))
         return slot_strings
 
     def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
