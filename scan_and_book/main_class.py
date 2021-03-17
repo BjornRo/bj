@@ -75,7 +75,9 @@ class QueryPost:
                 pass
         return False
 
-    def set_timeout(self, timeout: int) -> None:
+    def set_timeout(self, timeout: int) -> Union[TypeError, None]:
+        if not isinstance(timeout, int):
+            raise TypeError("Value must be an int")
         self.timeout = timeout
 
     def clear_data(self) -> None:
@@ -173,6 +175,8 @@ class QueryPostSiteF(QueryPost):
         return True
 
     def post_data(self, booking_url: str, logindata: dict) -> tuple:
+        if not (isinstance(booking_url, str) and isinstance(logindata, dict)):
+            return (False, "Error: Invalid booking url, and/or invalid logindata")
         try:
             response = requests.get(booking_url, self.timeout)
         except:
@@ -252,8 +256,11 @@ class MainController:
             self.booked = True
         return res
 
-    def set_location(self, location: Union[str, None]) -> None:
-        self.location = location
+    def set_location(self, location: Union[str, None]) -> bool:
+        if isinstance(location, str) or location is None:
+            self.location = location
+            return True
+        return False
 
     def get_location(self) -> Union[str, None]:
         return self.location
@@ -263,8 +270,11 @@ class MainController:
         list.sort(loc_keys)
         return loc_keys
 
-    def set_timeslot(self, timeslot: Union[datetime, None]) -> None:
-        self.timeslot = timeslot
+    def set_timeslot(self, timeslot: Union[datetime, None]) -> bool:
+        if isinstance(timeslot, datetime) or timeslot is None:
+            self.timeslot = timeslot
+            return True
+        return False
 
     def get_timeslot(self) -> Union[str, None]:
         return self.timeslot
@@ -272,20 +282,21 @@ class MainController:
     def get_timeslot_data(self, location=None, timeslot=None) -> Union[dict, None]:
         loc = location if location else self.location
         ts = timeslot if timeslot else self.timeslot
-        if not (loc and ts):
-            return None
-        return self.control.data.get(loc).get(ts)
+        if isinstance(loc, str) and isinstance(ts, datetime):
+            return self.control.data.get(loc).get(ts)
+        return None
+
 
     def get_all_timeslots(self, location=None) -> Union[tuple, None]:
         loc = location if location else self.location
-        if not loc:
-            return None
-        return tuple(self.control.data.get(loc))
+        if isinstance(loc, str):
+            return tuple(self.control.data.get(loc))
+        return None
 
     # Returns list for that particular location -> [("String", datetime, url_string)]
     def get_slotlist_string(self, location=None) -> Union[list, None]:
         loc = location if location else self.location
-        if not loc:
+        if not isinstance(loc, str):
             return None
 
         slot_strings = []
@@ -299,9 +310,9 @@ class MainController:
     def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
         t1 = ts1 if ts1 else self.timeslot
         t2 = ts2 if ts2 else self.get_timeslot_data().get("end_time")
-        if not (t1 and t2):
-            return None
-        return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
+        if isinstance(t1, datetime) and isinstance(t2,datetime):
+            return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
+        return None
 
     def get_payload_dict(self) -> dict:
         return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
