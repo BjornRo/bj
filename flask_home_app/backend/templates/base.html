@@ -1,13 +1,18 @@
 <!doctype html>
-<html>
+<html lang="en">
 
 <head>
-    {% block head %}
-    <title>{% block title %}Base{% endblock %}</title>
+    {% block meta %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% endblock %}
+    <title>{% block title %}Base{% endblock %}</title>
 </head>
 
 <body>
+    {% block header %}
+    
+    {% endblock %}
     <h1>Always visible parent text</h1>
     <hr>
     <div id="content">{% block content %}{% endblock %}</div>

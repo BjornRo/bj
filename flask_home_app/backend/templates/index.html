@@ -1,8 +1,15 @@
 {% extends "base.html" %}
-{% block title %}{{title}}{% endblock %}
-{% block head %}
+
+{% block meta %}
 {{ super() }}
 {% endblock %}
+
+{% block title %}{{title}}{% endblock %}
+
+{% block header %}
+{{ super() }}
+{% endblock %}
+
 {% block content %}
 Main layout page<br><br>
 <h2>{{message}}</h2>
