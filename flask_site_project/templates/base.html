@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+
+<head>
+    {% block head %}
+    <title>{% block title %}Base{% endblock %}</title>
+    {% endblock %}
+</head>
+
+<body>
+    <h1>Always visible parent text</h1>
+    <hr>
+    <div id="content">{% block content %}{% endblock %}</div>
+    <div id="footer">
+        {% block footer %}
+        <br>
+        <hr>
+        <h3>Footer placeholder.</h3>
+        {% endblock %}
+    </div>
+</body>
+
+</html>

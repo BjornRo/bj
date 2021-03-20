@@ -70,14 +70,13 @@ class QueryPost:
                     requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
                 ).find_all(find_tag, class_=tag_class)
                 self._buffer_full = True
-                return True
             except:
                 pass
-        return False
+        return self._buffer_full
 
     def set_timeout(self, timeout: int) -> Union[TypeError, None]:
-        if not isinstance(timeout, int):
-            raise TypeError("Value must be an int")
+        if not isinstance(timeout, int) or timeout <= 0:
+            raise TypeError("Value must be a positive integer")
         self.timeout = timeout
 
     def clear_data(self) -> None:
@@ -251,8 +250,7 @@ class MainController:
         return False
 
     def post_data(self, link: str, logindata: dict) -> tuple:
-        res = self.control.post_data(link, logindata)
-        if res[0]:
+        if (res := self.control.post_data(link, logindata))[0]:
             self.booked = True
         return res
 
@@ -286,7 +284,6 @@ class MainController:
             return self.control.data.get(loc).get(ts)
         return None
 
-
     def get_all_timeslots(self, location=None) -> Union[tuple, None]:
         loc = location if location else self.location
         if isinstance(loc, str):
@@ -310,7 +307,7 @@ class MainController:
     def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
         t1 = ts1 if ts1 else self.timeslot
         t2 = ts2 if ts2 else self.get_timeslot_data().get("end_time")
-        if isinstance(t1, datetime) and isinstance(t2,datetime):
+        if isinstance(t1, datetime) and isinstance(t2, datetime):
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
         return None
 
@@ -333,7 +330,12 @@ class MainController:
         return self.search_freq
 
 
-def get_user_input(offset_value: int, max_value: int):
+"""
+Functions for terminal usage only!
+"""
+
+
+def get_user_input(offset_value: int, max_value: int) -> Union[int, None]:
     user_input = input()
     if user_input.isdigit():
         user_input = int(user_input)
@@ -347,11 +349,11 @@ def get_user_input(offset_value: int, max_value: int):
     return get_user_input(offset_value, max_value)
 
 
-def select_day_time(control: MainController) -> Union[tuple, None]:
+def select_day_time(control: MainController, lfill: int) -> Union[tuple, None]:
     print(f"Select your time for {control.get_location()}:")
-    print("  0: Return to select location")
+    print(f"{' '*lfill}0: Return to select location")
     for i, t in enumerate(control.get_slotlist_string()):
-        print(f"  {i+1}: {t[0]}")
+        print(f"{' '*lfill}{i+1}: {t[0]}")
 
     all_timeslots = control.get_all_timeslots()
     user_input = get_user_input(-1, len(all_timeslots))
@@ -360,12 +362,12 @@ def select_day_time(control: MainController) -> Union[tuple, None]:
     return all_timeslots[user_input]
 
 
-def select_location(loc_list: list) -> Union[str, None]:
+def select_location(loc_list: list, lfill: int) -> Union[str, None]:
     # Print all locations
     print("Select location:")
-    print("  0: Exit")
+    print(f"{' '*lfill}0: Exit")
     for i, elem in enumerate(loc_list):
-        print(f"  {i+1}: {elem}")
+        print(f"{' '*lfill}{i+1}: {elem}")
     user_input = get_user_input(-1, len(loc_list))
     if user_input is None:
         return None
@@ -409,10 +411,10 @@ def main(control: MainController, logindata):
         if control.query_booking_sort():
             # Select time slot for booking. If selected None = Exit program.
             while not control.get_timeslot():
-                control.set_location(select_location(control.get_location_list()))
+                control.set_location(select_location(control.get_location_list(), 2))
                 if not control.get_location():
                     return
-                control.set_timeslot(select_day_time(control))
+                control.set_timeslot(select_day_time(control, 2))
 
             # Save the data for the timeslot. May end up as None if timeslot becomes unavailable: Passed the time etc..
             if not control.get_timeslot_data():
@@ -452,7 +454,7 @@ if __name__ == "__main__":
     # Search every # seconds. Default value.
     dat = load_json()
 
-    # Username and pass
+    # Username aso pass
     logindata = {"username": dat["login"]["username"], "password": dat["login"]["password"]}
 
     # Create object
