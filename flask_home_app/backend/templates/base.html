@@ -1,28 +1,48 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
+    {% block css %}
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/fontawesome.min.css') }}">
+    {% endblock %}
     {% block meta %}
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    {% endblock %}
+    {% block header %}
     {% endblock %}
     <title>{% block title %}Base{% endblock %}</title>
 </head>
 
 <body>
-    {% block header %}
-    
-    {% endblock %}
-    <h1>Always visible parent text</h1>
-    <hr>
+    <nav class="navbar navbar-expand-sm navbar-dark bg-dark">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbar">
+            <div class="navbar-nav">
+                <a class="text-light btn btn-secondary m-1" id="home" href="/">Home</a>
+                <a class="text-light btn btn-secondary m-1" id="dataviz" href="/dataviz">Data Graphs</a>
+                <a class="text-light btn btn-secondary m-1" id="postit" href="/notes">Notes</a>
+                <a class="text-light btn btn-secondary m-1" id="booking" href="/booking">Booking</a>
+            </div>
+        </div>
+    </nav>
+
     <div id="content">{% block content %}{% endblock %}</div>
+
+
     <div id="footer">
         {% block footer %}
-        <br>
-        <hr>
-        <h3>Footer placeholder.</h3>
         {% endblock %}
     </div>
+    <script type="text/javascript" src="{{ url_for('static', filename='jquery.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='popper.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='bootstrap.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='index.js') }}"></script>
+    {% block script %}
+    {% endblock %}
 </body>
 
 </html>
