@@ -6,6 +6,7 @@ from backend import db, TmpData
 from backend.models import *
 import schedule
 
+
 def main():
     app = create_app()
 
@@ -18,30 +19,30 @@ def main():
 
 def schedule_setup(app):
     def querydb():
-        time_now = datetime.now()
+        time_now = datetime.now().replace(microsecond=0, second=0)
         tsdb = Timestamp(time=time_now)
         with app.app_context():
             db.session.add(tsdb)
             for i, (key, value) in enumerate(tuple(TmpData.tmp.items())[1:]):
-                measurer_key = key.split('/')[0]
+                keydict = {"measurer": key.split("/")[0], "time": time_now}
                 temp, humid, press = None, None, None
                 if i == 0:
                     continue
-                    #temp, humid = value
+                    # temp, humid = value
                 elif i == 1:
                     temp, humid, press = value
                 elif i == 2:
                     temp = value
-                db.session.add(Temperature(measurer=measurer_key, time=time_now, temperature=temp))
+                db.session.add(Temperature(**keydict, temperature=temp))
                 if humid:
-                    db.session.add(Humidity(measurer=measurer_key, time=time_now, humidity=humid))
+                    db.session.add(Humidity(**keydict, humidity=humid))
                 if press:
-                    db.session.add(Airpressure(measurer=measurer_key, time=time_now, airpressure=press))
+                    db.session.add(Airpressure(**keydict, airpressure=press))
             db.session.commit()
         return
-    schedule.every().hour.at(':30').do(querydb)
-    schedule.every().hour.at(':00').do(querydb)
-    #schedule.every(5).seconds.do(querydb)
+
+    schedule.every().hour.at(":30").do(querydb)
+    schedule.every().hour.at(":00").do(querydb)
 
     while True:
         schedule.run_pending()
@@ -84,7 +85,6 @@ def mqtt_agent():
     client.on_message = on_message
     client.connect("www.home", 1883, 60)
     client.loop_forever(timeout=1)
-
 
 
 if __name__ == "__main__":

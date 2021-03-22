@@ -3,11 +3,17 @@
 {% block header %}
 <style>
     .left {
+
         grid-area: status;
     }
 
     .middle {
+        text-align: left;
         grid-area: control;
+    }
+
+    .middle-content {
+        grid-area: content;
     }
 
     .right {
@@ -16,16 +22,41 @@
 
     .grid-container {
         display: grid;
+        grid-template-columns: 0.1fr 0.6fr 0.2fr;
+        grid-template-rows: 0.97fr 0.5fr 0.5fr 0.4fr;
         grid-template-areas:
-            'status control right'
-            'status control right'
-            'status control right';
+            'status control control extra'
+            'status content content extra'
+            'status content content extra'
+            'status content content extra';
         grid-gap: 10px;
         padding: 10px;
+        background-color: #2196F3;
+    }
+
+    li {
+        text-align: center;
     }
 
     .grid-container>div {
-        text-align: left;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 20px 0;
+    }
+
+    .alert-box {
+        padding: 10px;
+        margin-top: 340px;
+        margin-bottom: 20px;
+        margin-left: 5px;
+        border: 2px solid transparent;
+        border-radius: 4px;
+    }
+
+    .success {
+        color: #3d9b3f;
+        background-color: #c1e6b4;
+        border-color: #d6e9c6;
+        display: none;
     }
 </style>
 {% endblock %}
@@ -40,7 +71,7 @@
             </div>
             <ul class="list-group list-group-flush">
                 <li class="list-group-item">
-                    <p id="pressure">{{data[2][2]|round(1)}}</p>hPa
+                    <p id="press">{{data[2][2]|round(1)}}</p>hPa
                 </li>
             </ul>
         </div>
@@ -66,22 +97,47 @@
         </div>
     </div>
     <div class="middle">
-        Hello
+        <div class="btn-group m-2" role="group">
+            <button type="button" class="btn btn-warning cbutton" id="full_light" value="on">Full light</button>
+            <button type="button" class="btn btn-warning cbutton" id="low_light" value="on">Low light</button>
+            <button type="button" class="btn btn-warning cbutton" id="heater" value="on">Heater</button>
+        </div><br style="clear: both;">
+        <div class="btn-group ml-2" role="group">
+            <button type="button" class="btn btn-danger cbutton" id="full_light" value="off">Full light off</button>
+            <button type="button" class="btn btn-danger cbutton" id="low_light" value="off">Low light off</button>
+            <button type="button" class="btn btn-danger cbutton" id="heater" value="off">Heater off</button>
+            <button type="button" class="btn btn-danger cbutton" id="alloff" value="off">Everything off</button>
+        </div>
+        <h6>
+            <br>
+            <div class="alert-box success">Command sent.</div>
+        </h6>
     </div>
+    <div class="middle-content"></div>
     <div class="right"></div>
 </div>
 
 {% endblock %}
 {% block script %}
 <script type="text/javascript">
+    $(".cbutton").click(function () {
+        $.ajax({
+            type: "POST",
+            url: "{{ url_for('views.post_command') }}",
+            data: { entity: $(this).attr('id'), command: $(this).val() },
+            success: $("div.success").fadeIn(300).delay(2500).fadeOut(500),
+        });
+        return false;
+    });
     setInterval(function () {
         $.getJSON("{{ url_for('views.home_status') }}", function (data) {
-            document.getElementById("pressure").innerHTML = Math.round(data['kitchen/temphumidpress'][2] * 10) / 10;
+            document.getElementById("press").innerHTML = Math.round(data['kitchen/temphumidpress'][2] * 10) / 10;
             document.getElementById("humid").innerHTML = Math.round(data['kitchen/temphumidpress'][1] * 10) / 10;
             document.getElementById("ktemp").innerHTML = Math.round(data['kitchen/temphumidpress'][0] * 10) / 10;
             document.getElementById("btemp").innerHTML = Math.round(data['balcony/temphumid'][0] * 10) / 10;
             document.getElementById("otemp").innerHTML = Math.round(data['bikeroom/temp'] * 10) / 10;
         });
     }, 5000);
+
 </script>
 {% endblock %}
