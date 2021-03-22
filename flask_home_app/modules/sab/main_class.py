@@ -330,6 +330,10 @@ class MainController:
         return self.search_freq
 
 
+def load_json() -> dict:
+    with open(os.path.dirname(os.path.realpath(__file__)) + "\\data.json", "r") as f:
+        return json.load(f)
+
 """
 Functions for terminal usage only!
 """
@@ -398,10 +402,6 @@ def countdown_blocking(value: int) -> None:
     sys.stdout.write("\r\n")
     sys.stdout.flush()
 
-
-def load_json() -> dict:
-    with open(os.path.dirname(os.path.realpath(__file__)) + "\\data.json", "r") as f:
-        return json.load(f)
 
 
 def main(control: MainController, logindata):

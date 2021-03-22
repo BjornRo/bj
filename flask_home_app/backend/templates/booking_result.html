@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block header %}
+{% endblock %}
+
+{% block title %}{{title}}{% endblock %}
+
+{% block content %}
+{% if success %}
+{% if booked %}
+<div class="card text-white bg-success mb-3" style="max-width: 18rem;">
+    <div class="card-body">
+        <h5 class="card-title">Successfully booked.</h5>
+        <p class="card-text">Booked {{data.get('time')}} at {{data.get('location')}}.</p>
+    </div>
+</div>
+{% else %}
+{% if url %}
+<div class="card text-white bg-warning mb-3" style="max-width: 18rem;">
+    <div class="card-body">
+        <h5 class="card-title">No slots available</h5>
+        <p class="card-text">No slots available {{data.get('time')}} at {{data.get('location')}}. Retrying
+            again in {{seconds}} seconds.
+        </p>
+    </div>
+</div>
+{% else %}
+<div class="card text-white bg-warning mb-3" style="max-width: 18rem;">
+    <div class="card-body">
+        <h5 class="card-title">Not unlocked.</h5>
+        <p class="card-text">{{data.get('time')}} at {{data.get('location')}} is not unlocked. Retrying
+            again in {{seconds}} seconds.</p>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% else %}
+<div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
+    <div class="card-body">
+        <h5 class="card-title">Failed.</h5>
+        <p class="card-text">Booking time not available anymore or an error booking.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+
+
+{% block script %}
+{% if success %}
+{% if not booked %}
+
+
+{% endif %}
+{% endif %}
+{% endblock %}

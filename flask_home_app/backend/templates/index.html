@@ -31,7 +31,6 @@
             'status content content extra';
         grid-gap: 10px;
         padding: 10px;
-        background-color: #2196F3;
     }
 
     li {
@@ -39,7 +38,6 @@
     }
 
     .grid-container>div {
-        background-color: rgba(255, 255, 255, 0.8);
         padding: 20px 0;
     }
 
@@ -58,15 +56,13 @@
         border-color: #d6e9c6;
         display: none;
     }
-</style>
-{% endblock %}
+</style>{% endblock %}
 {% block title %}{{title}}{% endblock %}
-
 {% block content %}
 <div class="grid-container">
     <div class="left">
         <div class="card m-2 bg-light " style="width: 12rem;">
-            <div class="card-header">
+            <div class="card-header h6">
                 Air Pressure
             </div>
             <ul class="list-group list-group-flush">
@@ -76,7 +72,7 @@
             </ul>
         </div>
         <div class="card m-2 bg-light" style="width: 12rem;">
-            <div class="card-header ">
+            <div class="card-header h6">
                 Humidity
             </div>
             <ul class="list-group list-group-flush">
@@ -86,7 +82,7 @@
             </ul>
         </div>
         <div class="card m-2 bg-light" style="width: 12rem;">
-            <div class="card-header">
+            <div class="card-header h6">
                 Temperatures
             </div>
             <ul class="list-group list-group-flush">
@@ -97,6 +93,30 @@
         </div>
     </div>
     <div class="middle">
+        <div class="card mt-2 bg-light" style="width: 28rem; height: 10rem;">
+            <div class="card-header h6">
+                Status balcony
+            </div>
+            <div class="card-body">
+                <div class="card-group">
+                    <div class="card" style="height: 5rem;">
+                        <div class="card-header bg-light h6" style="height: 2.5rem;">Full light</div>
+                        <p class="card-text m-2 ml-3" id="full_light_status">{% if rel_status[0] <= 0 %}Inactive{% else
+                                %} Active{%endif%}</p>
+                    </div>
+                    <div class="card" style="height: 5rem;">
+                        <div class="card-header bg-light h6" style="height: 2.5rem;">Low light</div>
+                        <p class="card-text m-2 ml-3" id="low_light_status">{% if rel_status[1] <= 0 %}Inactive{% else
+                                %} Active{%endif%}</p>
+                    </div>
+                    <div class="card" style="height: 5rem;">
+                        <div class="card-header bg-light h6" style="height: 2.5rem;">Heater</div>
+                        <p class="card-text m-2 ml-3" id="heater_status">{% if rel_status[3] <= 0 %}Inactive{% else %}
+                                Active{%endif%}</p>
+                    </div>
+                </div>
+            </div>
+        </div>{% if local %}
         <div class="btn-group m-2" role="group">
             <button type="button" class="btn btn-warning cbutton" id="full_light" value="on">Full light</button>
             <button type="button" class="btn btn-warning cbutton" id="low_light" value="on">Low light</button>
@@ -112,13 +132,14 @@
             <br>
             <div class="alert-box success">Command sent.</div>
         </h6>
+        {% endif %}
     </div>
     <div class="middle-content"></div>
     <div class="right"></div>
 </div>
-
 {% endblock %}
 {% block script %}
+{% if local %}
 <script type="text/javascript">
     $(".cbutton").click(function () {
         $.ajax({
@@ -129,6 +150,8 @@
         });
         return false;
     });
+</script>{%endif%}
+<script type="text/javascript">
     setInterval(function () {
         $.getJSON("{{ url_for('views.home_status') }}", function (data) {
             document.getElementById("press").innerHTML = Math.round(data['kitchen/temphumidpress'][2] * 10) / 10;
@@ -136,8 +159,9 @@
             document.getElementById("ktemp").innerHTML = Math.round(data['kitchen/temphumidpress'][0] * 10) / 10;
             document.getElementById("btemp").innerHTML = Math.round(data['balcony/temphumid'][0] * 10) / 10;
             document.getElementById("otemp").innerHTML = Math.round(data['bikeroom/temp'] * 10) / 10;
+            document.getElementById("full_light_status").innerHTML = (data['balcony/relaystatus'][0] <= 0) ? "Inactive" : "Active";
+            document.getElementById("low_light_status").innerHTML = (data['balcony/relaystatus'][1] <= 0) ? "Inactive" : "Active";
+            document.getElementById("heater_status").innerHTML = (data['balcony/relaystatus'][3] <= 0) ? "Inactive" : "Active";
         });
     }, 5000);
-
-</script>
-{% endblock %}
+</script>{% endblock %}
