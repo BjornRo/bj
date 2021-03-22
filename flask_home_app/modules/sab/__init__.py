@@ -72,20 +72,6 @@ class QueryPost:
                 pass
         return self._buffer_full
 
-    def set_timeout(self, timeout: int) -> Union[TypeError, None]:
-        if not isinstance(timeout, int) or timeout <= 0:
-            raise TypeError("Value must be a positive integer")
-        self.timeout = timeout
-
-    def clear_data(self) -> None:
-        self.data = {}
-
-    def get_data(self) -> dict:
-        return self.data
-
-    def get_timeform(self) -> str:
-        return self.timeform
-
     def sort_data() -> bool:
         raise NotImplementedError
 
@@ -171,8 +157,8 @@ class QueryPostSiteF(QueryPost):
                 self.data[location][start_time] = {"end_time": end_time, "url": url, "slots": slots}
         return True
 
-    def post_data(self, booking_url: str, logindata: dict) -> tuple:
-        if not (isinstance(booking_url, str) and isinstance(logindata, dict)):
+    def post_data(self, booking_url: str, user: str, passw: str) -> tuple:
+        if not (isinstance(booking_url, str) and isinstance(user, str) and isinstance(passw, str)):
             return (False, "Error: Invalid booking url, and/or invalid logindata")
         try:
             response = requests.get(booking_url, self.timeout)
@@ -191,8 +177,8 @@ class QueryPostSiteF(QueryPost):
                     payload[i["name"]] = i["value"]
                 except:
                     pass
-            payload["Username"] = logindata.get("username")
-            payload["Password"] = logindata.get("password")
+            payload["Username"] = user
+            payload["Password"] = passw
 
             # Send data
             try:
@@ -225,10 +211,8 @@ class MainController:
         hostname: str,
         path: str,
         query: str,
-        search_freq=90,
     ):
         self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query, "%H:%M")
-        self.search_freq = search_freq
         self.days = {
             i + first_wkday_num: v
             for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
@@ -236,10 +220,6 @@ class MainController:
 
         # Data
         self.attempts = 0
-        self.booked = False
-        self.location = None
-        self.timeslot = None
-        self.timeslot_data = None
 
     def query_booking_sort(self) -> bool:
         if self.control.query_site_with_args() and self.control.sort_data():
@@ -248,45 +228,12 @@ class MainController:
         return False
 
     def post_data(self, link: str, logindata: dict) -> tuple:
-        if (res := self.control.post_data(link, logindata))[0]:
-            self.booked = True
-        return res
-
-    def set_location(self, location: Union[str, None]) -> bool:
-        if isinstance(location, str) or location is None:
-            self.location = location
-            return True
-        return False
-
-    def get_location(self) -> Union[str, None]:
-        return self.location
+        return self.control.post_data(link, logindata)
 
     def get_location_list(self) -> list:
         loc_keys = list(self.control.data)
         list.sort(loc_keys)
         return loc_keys
-
-    def set_timeslot(self, timeslot: Union[datetime, None]) -> bool:
-        if isinstance(timeslot, datetime) or timeslot is None:
-            self.timeslot = timeslot
-            return True
-        return False
-
-    def get_timeslot(self) -> Union[str, None]:
-        return self.timeslot
-
-    def get_timeslot_data(self, location=None, timeslot=None) -> Union[dict, None]:
-        loc = location if location else self.location
-        ts = timeslot if timeslot else self.timeslot
-        if isinstance(loc, str) and isinstance(ts, datetime):
-            return self.control.data.get(loc).get(ts)
-        return None
-
-    def get_all_timeslots(self, location=None) -> Union[tuple, None]:
-        loc = location if location else self.location
-        if isinstance(loc, str):
-            return tuple(self.control.data.get(loc))
-        return None
 
     # Returns list for that particular location -> [("String", datetime, url_string)]
     def get_slotlist_string(self, location=None) -> Union[list, None]:
@@ -299,12 +246,10 @@ class MainController:
             end_dt, url, slots = v_dict.values()
             dayname = self.days.get(k_dt.weekday() + self.control.first_wkday_num)
             p_str = f"{dayname}, {self.slot_time_interval(k_dt, end_dt)}, slots: {slots if url else 'not unlocked'}"
-            slot_strings.append((p_str, k_dt, url))
+            slot_strings.append((p_str, k_dt, url, True if url and slots != "0" else False))
         return slot_strings
 
-    def slot_time_interval(self, ts1=None, ts2=None) -> Union[str, None]:
-        t1 = ts1 if ts1 else self.timeslot
-        t2 = ts2 if ts2 else self.get_timeslot_data().get("end_time")
+    def slot_time_interval(self, t1, t2) -> Union[str, None]:
         if isinstance(t1, datetime) and isinstance(t2, datetime):
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
         return None
@@ -312,23 +257,13 @@ class MainController:
     def get_payload_dict(self) -> dict:
         return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
 
-    def get_booked(self) -> bool:
-        return self.booked
-
     def get_attempts(self) -> int:
         return self.attempts
 
     def succ_attempts(self) -> None:
         self.attempts += 1
 
-    def set_search_freq(self, search_freq: int) -> None:
-        self.search_freq = search_freq
-
-    def get_search_freq(self) -> int:
-        return self.search_freq
 
 def load_json() -> dict:
-    import sys
-    print(os.path.dirname(os.path.realpath(__file__)) + "\\data.json", file=sys.stderr)
     with open(os.path.dirname(os.path.realpath(__file__)) + "\\data.json", "r") as f:
         return json.load(f)
