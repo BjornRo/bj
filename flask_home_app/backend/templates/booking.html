@@ -117,21 +117,24 @@
 
 {% block content %}
 {% if local %}
-{% for key,value in data.items() %}
+{% for i,(key,slot_list) in enumerate(data.items()) %}
 <div class="card m-2" style="width: 26rem;">
     <div class="card-header">
         <p class="h5">{{ key }}</p>
     </div>
     <ul class="list-group list-group-flush">
-        {% for slot in value %}
+        {% for j,slot_elem in enumerate(slot_list) %}
         <li class="list-group-item">
             <div class="container">
                 <div>
-                    <p class="card-text h6" style="line-height: 31px;">{{slot[0]}}</p>
+                    <p class="card-text h6" style="line-height: 31px;">{{slot_elem[0]}}</p>
                 </div>
                 <div style="float: right;">
-                    <button class="btn btn-success btn-sm bbutton" id="{{key}}" value="{{slot[1]}}">Book</a>
-                    <input
+                    <button class="btn btn-success btn-sm kbtn" value="loc{{i}}{{j}}">Book</button>
+                    <input type="hidden" class="loc{{i}}{{j}}" value="{{key}}" />
+                    <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[1]}}" />
+                    <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[2]}}" />
+                    <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[3]}}" />
                 </div>
             </div>
         </li>
@@ -145,13 +148,13 @@
     <div class="modal-content modal-dialog">
         <span class="close text-right">&times;</span>
         <article class="card-body">
-            <form id="fform" method="post" action="{{url_for('booking.result')}}" onsubmit="return validateForm()">
+            <form id="fform">
                 <div class="form-group">
                     <div class="input-group">
                         <div class="input-group-prepend">
                             <span class="input-group-text"> <i class="gg-user"></i> </span>
                         </div>
-                        <input name="user" class="form-control" placeholder="Email or login" type="email">
+                        <input id="user" class="form-control" placeholder="Email or login" type="email">
                     </div>
                 </div>
                 <div class="form-group">
@@ -159,7 +162,7 @@
                         <div class="input-group-prepend">
                             <span class="input-group-text"> <i class="gg-lock"></i> </span>
                         </div>
-                        <input name="pass" class="form-control" placeholder="******" type="password">
+                        <input id="pass" class="form-control" placeholder="******" type="password">
                     </div>
                 </div>
                 <div class="form-group">
@@ -170,16 +173,18 @@
     </div>
 </div>
 {% else %}
-<h4><center>Only accessible from local network!</center></h4>
+<div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
+    <div class="card-header">
+        <h5 class="card-title">Only accessible from local network!</h5>
+    </div>
+</div>
 {%endif%}
 {% endblock %}
 
 {% block script %}
 {% if local %}
 <script type="text/javascript">
-    // Modal related
-    var key = null;
-    var value = null;
+    var data = [];
     var modal = document.getElementById("myModal");
     document.getElementsByClassName("close")[0].onclick = function () {
         modal.style.display = "none";
@@ -189,27 +194,33 @@
             modal.style.display = "none";
         }
     }
-    $(".bbutton").click(function () {
+    $(".kbtn").click(function () {
+        data = []
+        var htmlcollection = document.getElementsByClassName($(this).val());
+        data.push(
+            htmlcollection[0].value,
+            htmlcollection[1].value,
+            htmlcollection[2].value ? htmlcollection[2].value : null,
+            htmlcollection[3].value === "True");
+        if (data[2] === null) {
+            // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
+            var slot_date = new Date(data[1]);
+            var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
+            var seconds = (slot_date - next_date) / 1000;
+        } else if (!data[3]) {
+            var seconds = 90
+        }
         modal.style.display = "block";
-        key = $(this).attr('id');
-        value = $(this).val();
     });
 
     // Submit data
-    $("#fform").submit(function () {
+    $("#fform").submit(function (e) {
+        e.preventDefault();
         if (document.forms["fform"]["pass"].value == "") {
             alert("Name must be filled out");
             return false;
         };
-        $('<input />').attr('type', 'hidden')
-            .attr('name', 'location')
-            .attr('value', key)
-            .appendTo('#fform');
-        $('<input />').attr('type', 'hidden')
-            .attr('name', 'time')
-            .attr('value', value)
-            .appendTo('#fform');
-        return true;
+        return false;
     });
 </script>
 {%endif%}

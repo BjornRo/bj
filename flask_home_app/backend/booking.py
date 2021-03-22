@@ -5,7 +5,7 @@ import pickle
 from . import local_addr
 
 validate_str = load_json()["site"]["validate"]
-control = MainController(0, **load_json()['site']['data'])
+#control = MainController(0, **load_json()['site']['data'])
 with open("data.p", "rb") as f:
     control = pickle.load(f)
     # with open("data.p","wb") as f:
@@ -15,11 +15,16 @@ with open("data.p", "rb") as f:
 booking = Blueprint("booking", __name__)
 
 
+@booking.context_processor
+def inject_enumerate():
+    return dict(enumerate=enumerate)
+
+
 @booking.route("")
 def home():
-    control.query_booking_sort()
-    with open("data.p","wb") as f:
-        pickle.dump(control, f, pickle.HIGHEST_PROTOCOL)
+    with open("data.p", "rb") as f:
+        control = pickle.load(f)
+    #control.query_booking_sort()
     addr = request.remote_addr.split(".")[:2]
     local = True if addr in local_addr else False
     if local:
