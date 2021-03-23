@@ -34,7 +34,7 @@ def post_data():
         password = request.form.get("pass")
         url = request.form.get("url")
         if username and password and url:
-            res = control.post_data(url, {"username": username, "password": password})
+            res = control.post_data(url, username, password)
         return {"success": res[0], "msg": res[1]}
     return redirect(url_for("booking.home"))
 
