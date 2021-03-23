@@ -181,6 +181,7 @@
                 <h5 class="card-title mt-2">Booking successful!</h5>
             </div>
         </div>
+        <button type="button" id="cancel" class="btn btn-danger mt-2" style="display: none;">Cancel</button>
     </div>
 </div>
 
@@ -213,6 +214,8 @@
     var attempts = 0;
     var seconds = 0;
     var booked = false;
+    var tt1;
+    var tt2;
 
     // Get data and show column
     $(".kbtn").click(function () {
@@ -233,7 +236,7 @@
         get_time_delay();
         document.getElementById("seconds").innerHTML = seconds;
         $("#status").fadeIn(750);
-    }
+    };
 
     function get_time_delay() {
         if (book_url == "None") {
@@ -241,9 +244,8 @@
             var slot_date = new Date(timeslot_);
             var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
             seconds = Math.ceil((slot_date - next_date) / 1000);
-        } else if (!bookable) {
+        } else if (!bookable)
             seconds = 90
-        }
     };
 
     function get_data_class(classname) {
@@ -287,9 +289,7 @@
                     $("#book_fail").fadeIn(750);
                 },
                 200: function (data) {
-                    if (data.success) {
-                        $("#book_success").fadeIn(750);
-                    }
+                    if (data.success) $("#book_success").fadeIn(750);
                     else {
                         document.getElementById("fail_msg").innerHTML = data.msg;
                         $("#book_failed").fadeIn(750);
@@ -298,19 +298,26 @@
             }
         });
         booked = true;
-    }
+    };
+
+    $("#cancel").click(function () {
+        clearTimeout(tt1);
+        clearTimeout(tt2);
+    });
+
     function wait_to_book() {
+        $("#cancel").fadeIn(750);
         var counter = seconds;
         var interval = 1000; // ms
         var expected = Date.now() + interval;
-        var tt1 = setTimeout(step, interval);
+        tt1 = setTimeout(step, interval);
         function step() {
             var dt = Date.now() - expected; // the drift (positive for overshooting)
 
-            attempts++;
             counter--;
             document.getElementById("seconds").innerHTML = counter;
             if (counter <= 0) {
+                attempts++;
                 document.getElementById("status_code").innerHTML = "Trying to book.";
                 counter = seconds;
                 $.ajax({
@@ -331,7 +338,7 @@
                             } else if (data.slots != "0") {
                                 book_url = data.url;
                                 book();
-                            } else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
+                            } else document.getElementById("status_code").innerHTML = data;//"Full, " + attempts.toString() + " attempts";
                         }
                     }
                 }
@@ -339,12 +346,12 @@
             }
             if (booked) {
                 clearTimeout(tt1);
-                clearInterval(tt2);
+                clearTimeout(tt2);
                 return;
             }
 
             expected += interval;
-            var tt2 = setTimeout(step, Math.max(0, interval - dt)); // take into account drift
+            tt2 = setTimeout(step, Math.max(0, interval - dt)); // take into account drift
         }
     };
 
