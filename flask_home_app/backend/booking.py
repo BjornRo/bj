@@ -28,11 +28,6 @@ def home():
     return render_template("booking.html", title="Booking not local", local=local)
 
 
-@booking.route("/dictdata")
-def dictdata():
-    return control.get_payload_dict()
-
-
 @booking.route("/post_data", methods=["POST"])
 def post_data():
     if True if request.remote_addr.split(".")[:2] in local_addr else False:
