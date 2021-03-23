@@ -25,7 +25,6 @@ local_addr = (["192", "168"], ["127", "0"])
 
 
 def create_app():
-
     app = Flask(__name__)
     Scss(app)
     app.json_encoder = CustomJSONEncoder
@@ -73,6 +72,6 @@ def create_db(app):
     from os import path
 
     if not path.exists("backend/" + DB_NAME):
-        from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp  # , Note
+        from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp, Notes
 
         db.create_all(app=app)

@@ -1,8 +1,7 @@
-from backend import create_app
 from datetime import datetime
 import time
 from threading import Thread
-from backend import db, TmpData
+from backend import db, TmpData, create_app
 from backend.models import *
 import schedule
 

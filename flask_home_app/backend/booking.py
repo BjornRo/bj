@@ -3,6 +3,7 @@ from datetime import datetime
 from modules.sab import MainController, load_json
 from . import local_addr
 
+validate_url = load_json()["site"]["validate"]
 control = MainController(0, **load_json()["site"]["data"])
 booking = Blueprint("booking", __name__)
 
@@ -27,16 +28,21 @@ def home():
     return render_template("booking.html", title="Booking not local", local=local)
 
 
+@booking.route("/dictdata")
+def dictdata():
+    return control.get_payload_dict()
+
+
 @booking.route("/post_data", methods=["POST"])
 def post_data():
     if True if request.remote_addr.split(".")[:2] in local_addr else False:
         username = request.form.get("user")
         password = request.form.get("pass")
         url = request.form.get("url")
-        if username and password and url:
+        if username and password and (validate_url in url):
             res = control.post_data(url, username, password)
-        return {"success": res[0], "msg": res[1]}
-    return redirect(url_for("booking.home"))
+            return {"success": res[0], "msg": res[1]}
+    return ("", 204)
 
 
 @booking.route("/get_timeslot_data", methods=["POST"])

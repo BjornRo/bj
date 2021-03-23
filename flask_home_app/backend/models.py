@@ -25,3 +25,7 @@ class Airpressure(db.Model):
     measurer = db.Column(db.String(8), db.ForeignKey('measurer.key'), primary_key=True)
     time = db.Column(db.DateTime(timezone=True), db.ForeignKey('timestamp.time'), primary_key=True)
     airpressure = db.Column(db.Numeric(2), nullable=False)
+
+class Notes(db.Model):
+    time = db.Column(db.DateTime(timezone=True), db.ForeignKey('timestamp.time'), primary_key=True)
+    text = db.Column(db.String(1000), nullable=False)

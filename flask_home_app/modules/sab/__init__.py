@@ -232,20 +232,7 @@ class MainController:
         list.sort(loc_keys)
         return loc_keys
 
-    def get_slotlist_string(self, location=None) -> Union[list, None]:
-        loc = location if location else self.location
-        if not isinstance(loc, str):
-            return None
-
-        slot_strings = []
-        for k_dt, v_dict in self.control.data.get(loc).items():
-            end_dt, url, slots = v_dict.values()
-            dayname = self.days.get(k_dt.weekday() + self.control.first_wkday_num)
-            p_str = f"{dayname}, {self.slot_time_interval(k_dt, end_dt)}, slots: {slots if url else 'not unlocked'}"
-            slot_strings.append((p_str, k_dt, url, True if url and slots != "0" else False))
-        return slot_strings
-
-    def slot_time_interval(self, t1, t2) -> Union[str, None]:
+    def time_interval(self, t1, t2) -> Union[str, None]:
         if isinstance(t1, datetime) and isinstance(t2, datetime):
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
         return None
@@ -256,7 +243,21 @@ class MainController:
         return None
 
     def get_payload_dict(self) -> dict:
-        return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
+        return {
+            location: {
+                st_time.isoformat(): {
+                    "print": (
+                        f"{self.days.get(st_time.weekday() + self.control.first_wkday_num)}, "
+                        f"{self.time_interval(st_time, st_dict['end_time'])}, "
+                        f"slots: {st_dict['slots'] if st_dict['url'] else 'not unlocked'}"
+                    ),
+                    "url": st_dict["url"],
+                    "bookable": True if st_dict["url"] and (st_dict["slots"] != "0") else False,
+                }
+                for st_time, st_dict in time_dict.items()
+            }
+            for location, time_dict in self.control.data.items()
+        }
 
 
 def load_json() -> dict:

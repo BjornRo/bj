@@ -102,25 +102,22 @@
 {% if local %}
 <div class="row">
     <div class="column1 ml-3">
-        {% for i,(key,slot_list) in enumerate(data.items()) %}
+        {% for i,(loc_key,slot_list) in enumerate(data.items()) %}
         <div class="card m-2" style="width: 26rem;">
             <div class="card-header">
-                <p class="h5">{{ key }}</p>
+                <p class="h5">{{loc_key}}</p>
             </div>
             <ul class="list-group list-group-flush">
-                {% for j,slot_elem in enumerate(slot_list) %}
+                {% for j,time_key in enumerate(slot_list) %}
                 <li class="list-group-item">
                     <div class="container">
                         <div>
-                            <p class="card-text h6" style="line-height: 31px;">{{slot_elem[0]}}</p>
+                            <p class="card-text h6" style="line-height: 31px;">{{data[loc_key][time_key]['print']}}</p>
                         </div>
                         <div style="float: right;">
                             <button class="btn btn-success btn-sm kbtn" value="loc{{i}}{{j}}">Book</button>
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{key}}" />
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[0]}}" />
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[1]}}" />
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[2]}}" />
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[3]}}" />
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{loc_key}}" />
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{time_key}}" />
                         </div>
                     </div>
                 </li>
@@ -163,8 +160,10 @@
             <div class="card-header h5">Status</div>
             <div class="card-body">
                 <h5 class="card-title" id="status_code"></h5>
-                <p class="card-text h6" id="seconds"></p>
-                <p class="card-text h6"> second(s)</p>
+                <div class="collapse" id="collapse_time">
+                    <p class="card-text h6" id="seconds"></p>
+                    <p class="card-text h6"> second(s)</p>
+                </div>
             </div>
         </div>
         <div id="book_fail" class="card text-white bg-danger mt-2" style="display: none;">
@@ -199,53 +198,48 @@
 {% block script %}
 {% if local %}
 <script type="text/javascript">
-    var string_time;
-    var location_;
-    var timeslot_;
-    var book_url;
-    var bookable;
+    var dat = {{ data | tojson}};;
+    var loc_key;
+    var time_key;
+    var slot_data;
+    var attempts = 0;
+    var exit = false;
+    // Will store credentials in token on server later.
     var user;
     var pass;
-    var attempts = 0;
-    var seconds = 0;
-    var booked = false;
     var tt1;
     var tt2;
+
     // Get data and show column
     $(".kbtn").click(function () {
         get_data_class($(this).val());
         document.getElementById("column2").style.display = "none";
         document.getElementById("status").style.display = "none";
-        document.getElementById("location").innerHTML = location_;
-        document.getElementById("timeslot").innerHTML = string_time;
-        if (bookable) document.getElementById("submit_data").innerHTML = "Submit";
-        else if (book_url === null) disp_status("Wait to book", "Not unlocked");
+        document.getElementById("location").innerHTML = loc_key;
+        document.getElementById("timeslot").innerHTML = slot_data.print;
+        if (slot_data.bookable) document.getElementById("submit_data").innerHTML = "Submit";
+        else if (slot_data.url === null) disp_status("Wait to book", "Not unlocked");
         else disp_status("Try to book", "Full");
         $("#column2").fadeIn(750);
     });
     function disp_status(submit, code) {
         document.getElementById("submit_data").innerHTML = submit;
         document.getElementById("status_code").innerHTML = code;
-        get_time_delay();
-        document.getElementById("seconds").innerHTML = seconds;
         $("#status").fadeIn(750);
     };
     function get_time_delay() {
-        if (book_url == "None") {
+        if (slot_data.url === null) {
             // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
-            var slot_date = new Date(timeslot_);
+            var slot_date = new Date(time_key);
             var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
-            seconds = Math.ceil((slot_date - next_date) / 1000);
-        } else if (!bookable)
-            seconds = 90
+            return Math.ceil((slot_date - next_date) / 1000);
+        } else return 90
     };
     function get_data_class(classname) {
         var htmlcollection = document.getElementsByClassName(classname);
-        location_ = htmlcollection[0].value;
-        string_time = htmlcollection[1].value;
-        timeslot_ = htmlcollection[2].value;
-        book_url = htmlcollection[3].value ? htmlcollection[3].value : null;
-        bookable = htmlcollection[4].value === "True";
+        loc_key = htmlcollection[0].value;
+        time_key = htmlcollection[1].value;
+        slot_data = dat[loc_key][time_key];
     };
     // Booking routine
     $("#submit_data").click(function (e) {
@@ -253,8 +247,7 @@
         if (document.forms["fform"]["user"].value == "") {
             alert("Username must be filled out");
             return false;
-        }
-        if (document.forms["fform"]["pass"].value == "") {
+        } else if (document.forms["fform"]["pass"].value == "") {
             alert("Password must be filled out");
             return false;
         }
@@ -265,14 +258,14 @@
         user = document.forms["fform"]["user"].value;
         pass = document.forms["fform"]["pass"].value;
         document.getElementById("fform").reset();
-        if (bookable) book();
+        if (slot_data.bookable) book();
         else wait_to_book();
     });
     function book() {
         $.ajax({
             url: "{{url_for('booking.post_data')}}",
             type: "POST",
-            data: { "user": user, "pass": pass, "url": book_url },
+            data: { "user": user, "pass": pass, "url": slot_data.url },
             statusCode: {
                 204: function (data) {
                     document.getElementById("fail_msg").innerHTML = "204 - Reload site to try again.";
@@ -287,14 +280,18 @@
                 }
             }
         });
-        booked = true;
+        exit = true;
     };
     $("#cancel").click(function () {
         clearTimeout(tt1);
         clearTimeout(tt2);
         document.getElementById("status_code").innerHTML = "Stopped";
+        $("#collapse_time").collapse("hide");
     });
     function wait_to_book() {
+        var seconds = get_time_delay();
+        document.getElementById("seconds").innerHTML = seconds;
+        $("#collapse_time").collapse("show");
         $("#cancel").fadeIn(750);
         var counter = seconds;
         var interval = 1000; // ms
@@ -312,28 +309,27 @@
                 $.ajax({
                     url: "{{url_for('booking.get_timeslot_data')}}",
                     type: "POST",
-                    data: { "location": location_, "timeslot": timeslot_ },
+                    data: { "location": loc_key, "timeslot": time_key },
                     statusCode: {
                         204: function (data) {
                             document.getElementById("fail_msg").innerHTML = "204 - Reload site to try again.";
                             $("#book_fail").fadeIn(750);
-                            booked = true;
+                            exit = true;
                         },
                         200: function (data) {
-                            if (data.url == "None") {
+                            slot_data = data;
+                            if (slot_data.url === null) {
                                 document.getElementById("fail_msg").innerText = "Timeslot expired, stopping."
                                 $("#book_fail").fadeIn(750);
-                                booked = true; // It's not true, but just imagine that it is.
-                            } else if (data.slots != "0") {
-                                book_url = data.url;
-                                book();
-                            } else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
+                                exit = true; // It's not true, but just imagine that it is.
+                            } else if (slot_data.slots != "0") book();
+                            else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
                         }
                     }
                 }
                 );
             }
-            if (booked) {
+            if (exit) {
                 clearTimeout(tt1);
                 clearTimeout(tt2);
                 return;
