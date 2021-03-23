@@ -96,10 +96,7 @@
     }
 </style>
 {% endblock %}
-
 {% block title %}{{title}}{% endblock %}
-
-
 {% block content %}
 {% if not failed %}
 {% if local %}
@@ -184,7 +181,6 @@
         <button type="button" id="cancel" class="btn btn-danger mt-2" style="display: none;">Cancel</button>
     </div>
 </div>
-
 {% else %}
 <div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
     <div class="card-header">
@@ -200,7 +196,6 @@
 </div>
 {%endif%}
 {% endblock %}
-
 {% block script %}
 {% if local %}
 <script type="text/javascript">
@@ -216,7 +211,6 @@
     var booked = false;
     var tt1;
     var tt2;
-
     // Get data and show column
     $(".kbtn").click(function () {
         get_data_class($(this).val());
@@ -229,7 +223,6 @@
         else disp_status("Try to book", "Full");
         $("#column2").fadeIn(750);
     });
-
     function disp_status(submit, code) {
         document.getElementById("submit_data").innerHTML = submit;
         document.getElementById("status_code").innerHTML = code;
@@ -237,7 +230,6 @@
         document.getElementById("seconds").innerHTML = seconds;
         $("#status").fadeIn(750);
     };
-
     function get_time_delay() {
         if (book_url == "None") {
             // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
@@ -247,7 +239,6 @@
         } else if (!bookable)
             seconds = 90
     };
-
     function get_data_class(classname) {
         var htmlcollection = document.getElementsByClassName(classname);
         location_ = htmlcollection[0].value;
@@ -256,7 +247,6 @@
         book_url = htmlcollection[3].value ? htmlcollection[3].value : null;
         bookable = htmlcollection[4].value === "True";
     };
-
     // Booking routine
     $("#submit_data").click(function (e) {
         e.preventDefault();
@@ -299,12 +289,11 @@
         });
         booked = true;
     };
-
     $("#cancel").click(function () {
         clearTimeout(tt1);
         clearTimeout(tt2);
+        document.getElementById("status_code").innerHTML = "Stopped";
     });
-
     function wait_to_book() {
         $("#cancel").fadeIn(750);
         var counter = seconds;
@@ -338,7 +327,7 @@
                             } else if (data.slots != "0") {
                                 book_url = data.url;
                                 book();
-                            } else document.getElementById("status_code").innerHTML = data;//"Full, " + attempts.toString() + " attempts";
+                            } else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
                         }
                     }
                 }
@@ -349,13 +338,9 @@
                 clearTimeout(tt2);
                 return;
             }
-
             expected += interval;
             tt2 = setTimeout(step, Math.max(0, interval - dt)); // take into account drift
         }
     };
-
-
 </script>
-{%endif%}
-{% endblock %}
+{%endif%}{% endblock %}
