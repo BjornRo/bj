@@ -1,7 +1,8 @@
-from flask import Flask, url_for
+from flask import Flask, send_from_directory
 from flask.json import JSONEncoder
 from flask_sqlalchemy import SQLAlchemy
 from flask_scss import Scss
+import os
 from datetime import date
 
 # Pseudo memory-db. Use a static class.
@@ -44,7 +45,13 @@ def create_app():
     app.register_blueprint(booking, url_prefix="/booking")
     app.register_blueprint(datavisualizer, url_prefix="/dataviz")
 
-    app.add_url_rule("/favicon.ico", redirect_to=url_for("static", filename="favicon.ico"))
+    @app.route("/favicon.ico")
+    def favicon():
+        return send_from_directory(
+            os.path.join(app.root_path, "static"),
+            "favicon.ico",
+            mimetype="image/vnd.microsoft.icon",
+        )
 
     return app
 

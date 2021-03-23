@@ -33,21 +33,6 @@
         width: 80%;
     }
 
-    /* The Close Button */
-    .close {
-        color: #aaaaaa;
-        float: right;
-        font-size: 28px;
-        font-weight: bold;
-    }
-
-    .close:hover,
-    .close:focus {
-        color: #000;
-        text-decoration: none;
-        cursor: pointer;
-    }
-
     .gg-lock {
         box-sizing: border-box;
         position: relative;
@@ -116,66 +101,100 @@
 
 
 {% block content %}
+{% if not failed %}
 {% if local %}
-{% for i,(key,slot_list) in enumerate(data.items()) %}
-<div class="card m-2" style="width: 26rem;">
-    <div class="card-header">
-        <p class="h5">{{ key }}</p>
+<div class="row">
+    <div class="column1">
+        {% for i,(key,slot_list) in enumerate(data.items()) %}
+        <div class="card m-2" style="width: 26rem;">
+            <div class="card-header">
+                <p class="h5">{{ key }}</p>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for j,slot_elem in enumerate(slot_list) %}
+                <li class="list-group-item">
+                    <div class="container">
+                        <div>
+                            <p class="card-text h6" style="line-height: 31px;">{{slot_elem[0]}}</p>
+                        </div>
+                        <div style="float: right;">
+                            <button class="btn btn-success btn-sm kbtn" value="loc{{i}}{{j}}">Book</button>
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{key}}" />
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[0]}}" />
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[1]}}" />
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[2]}}" />
+                            <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[3]}}" />
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
     </div>
-    <ul class="list-group list-group-flush">
-        {% for j,slot_elem in enumerate(slot_list) %}
-        <li class="list-group-item">
-            <div class="container">
-                <div>
-                    <p class="card-text h6" style="line-height: 31px;">{{slot_elem[0]}}</p>
-                </div>
-                <div style="float: right;">
-                    <button class="btn btn-success btn-sm kbtn" value="loc{{i}}{{j}}">Book</button>
-                    <input type="hidden" class="loc{{i}}{{j}}" value="{{key}}" />
-                    <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[1]}}" />
-                    <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[2]}}" />
-                    <input type="hidden" class="loc{{i}}{{j}}" value="{{slot_elem[3]}}" />
+    <div id="column2" class="column2 mt-2" style="width: 320px;display:none;">
+        <div class="card">
+            <div class="card-header">
+                <p class="h5" id="location"></p>
+            </div>
+            <div class="card-body">
+                <p class="h6" id="timeslot"></p>
+            </div>
+        </div>
+        <form id="fform" class="mt-2">
+            <div class="form-group">
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"> <i class="gg-user"></i> </span>
+                    </div>
+                    <input id="user" class="form-control" placeholder="Email or login" type="email">
                 </div>
             </div>
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endfor %}
-
-
-<div id="myModal" class="modal">
-    <div class="modal-content modal-dialog">
-        <span class="close text-right">&times;</span>
-        <article class="card-body">
-            <form id="fform">
-                <div class="form-group">
-                    <div class="input-group">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"> <i class="gg-user"></i> </span>
-                        </div>
-                        <input id="user" class="form-control" placeholder="Email or login" type="email">
+            <div class="form-group">
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"> <i class="gg-lock"></i> </span>
                     </div>
+                    <input id="pass" class="form-control" placeholder="******" type="password">
                 </div>
-                <div class="form-group">
-                    <div class="input-group">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"> <i class="gg-lock"></i> </span>
-                        </div>
-                        <input id="pass" class="form-control" placeholder="******" type="password">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <button id="submit_data" type="submit" class="btn btn-primary btn-block"> Submit </button>
-                </div>
-            </form>
-        </article>
+            </div>
+            <div class="form-group">
+                <button id="submit_data" type="submit" class="btn btn-primary btn-block"> Submit </button>
+            </div>
+        </form>
+        <div id="status" class="card text-white bg-warning mt-2" style="display: none;">
+            <div class="card-header h5">Status</div>
+            <div class="card-body">
+                <h5 class="card-title" id="status_code"></h5>
+                <p class="card-text h6" id="seconds"></p>
+                <p class="card-text h6"> second(s)</p>
+            </div>
+        </div>
+        <div id="book_fail" class="card text-white bg-danger mt-2" style="display: none;">
+            <div class="card-body">
+                <h5 class="card-title">Booking failed</h5>
+                <p class="card-text h6" id="fail_msg"></p>
+            </div>
+        </div>
+        <div id="book_success" class="card text-white bg-success mt-2" style="display: none;">
+            <div class="card-body">
+                <h5 class="card-title mt-2">Booking successful!</h5>
+            </div>
+        </div>
     </div>
 </div>
+
 {% else %}
 <div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
     <div class="card-header">
         <h5 class="card-title">Only accessible from local network!</h5>
+    </div>
+</div>
+{%endif%}
+{% else %}
+<div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
+    <div class="card-header">
+        <h5 class="card-title">Failed to get bookings.</h5>
     </div>
 </div>
 {%endif%}
@@ -184,44 +203,152 @@
 {% block script %}
 {% if local %}
 <script type="text/javascript">
-    var data = [];
-    var modal = document.getElementById("myModal");
-    document.getElementsByClassName("close")[0].onclick = function () {
-        modal.style.display = "none";
-    }
-    window.onclick = function (event) {
-        if (event.target == modal) {
-            modal.style.display = "none";
-        }
-    }
+    var string_time;
+    var location_;
+    var timeslot_;
+    var book_url;
+    var bookable;
+    var user;
+    var pass;
+    var attempts = 0;
+    var seconds = 0;
+    var booked = false;
+
+    // Get data and show column
     $(".kbtn").click(function () {
-        data = []
-        var htmlcollection = document.getElementsByClassName($(this).val());
-        data.push(
-            htmlcollection[0].value,
-            htmlcollection[1].value,
-            htmlcollection[2].value ? htmlcollection[2].value : null,
-            htmlcollection[3].value === "True");
-        if (data[2] === null) {
-            // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
-            var slot_date = new Date(data[1]);
-            var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
-            var seconds = (slot_date - next_date) / 1000;
-        } else if (!data[3]) {
-            var seconds = 90
-        }
-        modal.style.display = "block";
+        get_data_class($(this).val());
+        document.getElementById("column2").style.display = "none";
+        document.getElementById("status").style.display = "none";
+        document.getElementById("location").innerHTML = location_;
+        document.getElementById("timeslot").innerHTML = string_time;
+        if (bookable) document.getElementById("submit_data").innerHTML = "Submit";
+        else if (book_url === null) disp_status("Wait to book", "Not unlocked");
+        else disp_status("Try to book", "Full");
+        $("#column2").fadeIn(750);
     });
 
-    // Submit data
-    $("#fform").submit(function (e) {
+    function disp_status(submit, code) {
+        document.getElementById("submit_data").innerHTML = submit;
+        document.getElementById("status_code").innerHTML = code;
+        get_time_delay();
+        document.getElementById("seconds").innerHTML = seconds;
+        $("#status").fadeIn(750);
+    }
+
+    function get_time_delay() {
+        if (book_url == "None") {
+            // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
+            var slot_date = new Date(timeslot_);
+            var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
+            seconds = Math.ceil((slot_date - next_date) / 1000);
+        } else if (!bookable) {
+            seconds = 90
+        }
+    };
+
+    function get_data_class(classname) {
+        var htmlcollection = document.getElementsByClassName(classname);
+        location_ = htmlcollection[0].value;
+        string_time = htmlcollection[1].value;
+        timeslot_ = htmlcollection[2].value;
+        book_url = htmlcollection[3].value ? htmlcollection[3].value : null;
+        bookable = htmlcollection[4].value === "True";
+    };
+
+    // Booking routine
+    $("#submit_data").click(function (e) {
         e.preventDefault();
-        if (document.forms["fform"]["pass"].value == "") {
-            alert("Name must be filled out");
+        if (document.forms["fform"]["user"].value == "") {
+            alert("Username must be filled out");
             return false;
-        };
-        return false;
+        }
+        if (document.forms["fform"]["pass"].value == "") {
+            alert("Password must be filled out");
+            return false;
+        }
+        document.getElementById("fform").style.display = "none";
+        document.querySelectorAll('button.kbtn').forEach(elem => {
+            elem.disabled = true;
+        });
+        user = document.forms["fform"]["user"].value;
+        pass = document.forms["fform"]["pass"].value;
+        document.getElementById("fform").reset();
+        if (bookable) book();
+        else wait_to_book();
     });
+    function book() {
+        $.ajax({
+            url: "{{url_for('booking.post_data')}}",
+            type: "POST",
+            data: { "user": user, "pass": pass, "url": book_url },
+            statusCode: {
+                204: function (data) {
+                    document.getElementById("fail_msg").innerHTML = "204 - Reload site to try again.";
+                    $("#book_fail").fadeIn(750);
+                },
+                200: function (data) {
+                    if (data.success) {
+                        $("#book_success").fadeIn(750);
+                    }
+                    else {
+                        document.getElementById("fail_msg").innerHTML = data.msg;
+                        $("#book_failed").fadeIn(750);
+                    }
+                }
+            }
+        });
+        booked = true;
+    }
+    function wait_to_book() {
+        var counter = seconds;
+        var interval = 1000; // ms
+        var expected = Date.now() + interval;
+        var tt1 = setTimeout(step, interval);
+        function step() {
+            var dt = Date.now() - expected; // the drift (positive for overshooting)
+
+            attempts++;
+            counter--;
+            document.getElementById("seconds").innerHTML = counter;
+            if (counter <= 0) {
+                document.getElementById("status_code").innerHTML = "Trying to book.";
+                counter = seconds;
+                $.ajax({
+                    url: "{{url_for('booking.get_timeslot_data')}}",
+                    type: "POST",
+                    data: { "location": location_, "timeslot": timeslot_ },
+                    statusCode: {
+                        204: function (data) {
+                            document.getElementById("fail_msg").innerHTML = "204 - Reload site to try again.";
+                            $("#book_fail").fadeIn(750);
+                            booked = true;
+                        },
+                        200: function (data) {
+                            if (data.url == "None") {
+                                document.getElementById("fail_msg").innerText = "Timeslot expired, stopping."
+                                $("#book_fail").fadeIn(750);
+                                booked = true; // It's not true, but just imagine that it is.
+                            } else if (data.slots != "0") {
+                                book_url = data.url;
+                                book();
+                            } else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
+                        }
+                    }
+                }
+                );
+            }
+            if (booked) {
+                clearTimeout(tt1);
+                clearInterval(tt2);
+                return;
+            }
+
+            expected += interval;
+            var tt2 = setTimeout(step, Math.max(0, interval - dt)); // take into account drift
+        }
+    };
+
+
 </script>
 {%endif%}
 {% endblock %}

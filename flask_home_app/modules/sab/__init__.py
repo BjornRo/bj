@@ -218,9 +218,6 @@ class MainController:
             for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
         }
 
-        # Data
-        self.attempts = 0
-
     def query_booking_sort(self) -> bool:
         if self.control.query_site_with_args() and self.control.sort_data():
             self.control.flush_buffer()
@@ -235,7 +232,6 @@ class MainController:
         list.sort(loc_keys)
         return loc_keys
 
-    # Returns list for that particular location -> [("String", datetime, url_string)]
     def get_slotlist_string(self, location=None) -> Union[list, None]:
         loc = location if location else self.location
         if not isinstance(loc, str):
@@ -254,14 +250,13 @@ class MainController:
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
         return None
 
+    def get_timeslot_data(self, location, timeslot) -> Union[dict, None]:
+        if isinstance(location, str) and isinstance(timeslot, datetime):
+            return self.control.data.get(location).get(timeslot)
+        return None
+
     def get_payload_dict(self) -> dict:
         return {loc: self.get_slotlist_string(loc) for loc in self.get_location_list()}
-
-    def get_attempts(self) -> int:
-        return self.attempts
-
-    def succ_attempts(self) -> None:
-        self.attempts += 1
 
 
 def load_json() -> dict:
