@@ -224,8 +224,8 @@ class MainController:
             return True
         return False
 
-    def post_data(self, link: str, logindata: dict) -> tuple:
-        return self.control.post_data(link, logindata)
+    def post_data(self, link: str, username: str, password: str) -> tuple:
+        return self.control.post_data(link, username, password)
 
     def get_location_list(self) -> list:
         loc_keys = list(self.control.data)
