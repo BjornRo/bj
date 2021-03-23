@@ -202,13 +202,12 @@
     var loc_key;
     var time_key;
     var slot_data;
-    var attempts = 0;
     var exit = false;
+    var tt1;
+    var tt2;
     // Will store credentials in token on server later.
     var user;
     var pass;
-    var tt1;
-    var tt2;
 
     // Get data and show column
     $(".kbtn").click(function () {
@@ -289,6 +288,7 @@
         $("#collapse_time").collapse("hide");
     });
     function wait_to_book() {
+        var attempts = 0;
         var seconds = get_time_delay();
         document.getElementById("seconds").innerHTML = seconds;
         $("#collapse_time").collapse("show");
