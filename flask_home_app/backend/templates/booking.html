@@ -63,6 +63,23 @@
         border-top-right-radius: 3px;
         top: 9px
     }
+
+    .col1f {
+        width: 380px;
+    }
+
+    .col2f {
+        width: 280px;
+    }
+
+    .adjtxt {
+        position: relative;
+        top: 4px;
+    }
+
+    .hidden {
+        display: none;
+    }
 </style>
 {% endif %}
 {% endblock %}
@@ -70,64 +87,45 @@
 {% block content %}
 {% if not failed %}
 {% if local %}
-<div class="row" style="max-width: fit-content;">
-    <div class="ml-3">
+<div class="row g-0">
+    <div class="col-4 col1f">
         {% for i,(loc_key,slot_list) in enumerate(data.items()) %}
-        <div class="card m-2" style="width: 26rem;">
-            <div class="card-header">
-                <p class="h5">{{loc_key}}</p>
-            </div>
+        <div class="card m-2">
+            <h5 class="card-header" id="loc{{i}}">{{loc_key}}</h5>
             <ul class="list-group list-group-flush">
                 {% for j,time_key in enumerate(slot_list) %}
                 <li class="list-group-item">
-                    <div class="container">
-                        <div>
-                            <p class="card-text h6" style="line-height: 31px;">{{data[loc_key][time_key]['p']}}</p>
-                        </div>
-                        <div style="float: right;">
-                            <button class="btn btn-success btn-sm kbtn" value="loc{{i}}{{j}}">Book</button>
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{loc_key}}" />
-                            <input type="hidden" class="loc{{i}}{{j}}" value="{{time_key}}" />
-                        </div>
-                    </div>
+                    <p class="d-inline h6 adjtxt" id="loc{{i}},{{j}}">
+                        {{data[loc_key][time_key]['print']}}, slots: {{data[loc_key][time_key]['slots']}}
+                    </p>
+                    <button class="btn btn-success btn-sm kbtn float-end" value="loc{{i}},{{j}}"
+                        name="{{time_key}}">Book</button>
                 </li>
                 {% endfor %}
             </ul>
         </div>
         {% endfor %}
     </div>
-    <div id="column2" class="mt-2" style="width: 320px;display:none;">
+    <div class="col-4 mt-2 col2f hidden" id="column2">
         <div class="card">
-            <div class="card-header">
-                <p class="h5" id="location"></p>
-            </div>
-            <div class="card-body">
-                <p class="h6" id="timeslot"></p>
-            </div>
+            <div class="card-header h5" id="location"></div>
+            <div class="card-body h6 adjtxt" id="timeslot"></div>
         </div>
-        <form id="fform" class="mt-2">
-            <div class="form-group">
+        <div class="card mt-2" id="cardform">
+            <form id="fform" class="m-2">
                 <div class="input-group">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text"> <i class="gg-user"></i> </span>
-                    </div>
+                    <div class="input-group-text"><i class="gg-user"></i></div>
                     <input id="user" class="form-control" placeholder="Email or login" type="email">
                 </div>
-            </div>
-            <div class="form-group">
                 <div class="input-group">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text"> <i class="gg-lock"></i> </span>
-                    </div>
+                    <div class="input-group-text"><i class="gg-lock"></i></div>
                     <input id="pass" class="form-control" placeholder="******" type="password">
                 </div>
-            </div>
-            <div class="form-group">
-                <button id="submit_data" type="submit" class="btn btn-primary btn-block"> Submit </button>
-            </div>
-        </form>
-        <div id="status" style="display: none;">
-            <div class="card-header h5">Status</div>
+                <button id="submit_data" type="submit" class="btn btn-primary btn-block mt-2"> Submit </button>
+            </form>
+        </div>
+        <div class="card mt-2" id="status">
+            <h5 class="card-header">Status</h5>
             <div class="card-body">
                 <h5 class="card-title" id="status_code"></h5>
                 <div class="collapse" id="status_info">
@@ -135,7 +133,7 @@
                 </div>
             </div>
         </div>
-        <button type="button" id="cancel" class="btn btn-danger mt-2" style="display: none;">Cancel</button>
+        <button type="button" id="cancel" class="btn btn-danger mt-2 hidden">Cancel</button>
     </div>
 </div>
 {% else %}
@@ -156,10 +154,10 @@
 {% block script %}
 {% if local %}
 <script type="text/javascript">
-    var dat = {{ data | tojson}};;
     var loc_key;
     var time_key;
-    var sdat;
+    var slot_string
+    var bookable;
     var exit = false;
     var tt1;
     var tt2;
@@ -169,29 +167,36 @@
 
     // Get data and show column
     $(".kbtn").click(function () {
-        get_data_class($(this).val());
-        document.getElementById("column2").style.display = "none";
+        $("#column2").hide();
+        get_slot_data($(this));
         document.getElementById("location").innerHTML = loc_key;
-        document.getElementById("timeslot").innerHTML = sdat.p;
-        if (sdat.b) disp_status("Submit", "bg-success", "Bookable", "");
-        else if (sdat.u === null) disp_status("Wait to book", "bg-warning", "Not unlocked", "");
+        document.getElementById("timeslot").innerHTML = slot_string;
+        if (bookable) disp_status("Submit", "bg-success", "Bookable", "");
+        else if (bookable === null) disp_status("Wait to book", "bg-warning", "Not unlocked", "");
         else disp_status("Try to book", "bg-warning", "Full", "");
         $("#column2").fadeIn(750);
     });
-    function get_time_delay() {
-        if (sdat.u === null) {
-            // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
-            var slot_date = new Date(time_key);
-            var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
-            return Math.ceil((slot_date - next_date) / 1000);
-        } else return 90
+    function get_slot_data(item) { // "loc0-1"
+        loc_key = document.getElementById(item.val().split(",").shift()).innerHTML;
+        time_key = item.attr("name");
+        var slot_data = document.getElementById(item.val()).innerHTML.trim().split(", slots: ");
+        slot_string = slot_data[0];
+        if (slot_data[1] == "0") bookable = false;
+        else if (slot_data[1] == "not unlocked") bookable = null;
+        else bookable = true;
     };
-    function get_data_class(classname) {
-        var htmlxs = document.getElementsByClassName(classname);
-        loc_key = htmlxs[0].value;
-        time_key = htmlxs[1].value;
-        sdat = dat[loc_key][time_key];
+    function disp_status(submit, status, msg, txt) {
+        $("#status").hide();
+        if (submit) document.getElementById("submit_data").innerHTML = submit;
+        document.getElementById("status").className = 'card text-white mt-2 ' + status;
+        document.getElementById("status_code").innerHTML = msg;
+        $("#status").fadeIn(750);
+        if (txt) {
+            document.getElementById("status_text").innerHTML = txt;
+            $("#status_info").collapse("show");
+        } else $("#status_info").collapse("hide");
     };
+
     // Booking routine
     $("#submit_data").click(function (e) {
         e.preventDefault();
@@ -202,85 +207,81 @@
             alert("Password must be filled out");
             return false;
         }
-        document.getElementById("fform").style.display = "none";
         document.querySelectorAll('button.kbtn').forEach(elem => {
             elem.disabled = true;
         });
+        $("#cardform").hide();
         user = document.forms["fform"]["user"].value;
         pass = document.forms["fform"]["pass"].value;
         document.getElementById("fform").reset();
-        if (sdat.b) book();
+        if (bookable) book();
         else wait_to_book();
     });
-    function disp_status(submit, status, msg, txt) {
-        document.getElementById("status").style.display = "none";
-        if (submit) document.getElementById("submit_data").innerHTML = submit;
-        document.getElementById("status").className = 'card text-white mt-2 ' + status;
-        document.getElementById("status_code").innerHTML = msg;
-        $("#status").fadeIn(750);
-        if (txt) {
-            document.getElementById("status_text").innerHTML = txt;
-            $("#status_info").collapse("show");
-            $("#cancel").fadeIn(750);
-        } else $("#status_info").collapse("hide");
-    };
     function book() {
+        exit_cancel();
         $.ajax({
-            url: "{{url_for('booking.post_data')}}",
+            url: "{{url_for('booking.api')}}",
             type: "POST",
-            data: { "user": user, "pass": pass, "url": sdat.u },
+            data: { "user": user, "pass": pass, "loc_key": loc_key, "time_key": time_key },
             statusCode: {
                 204: function () { disp_status("", "bg-danger", "204 - Reload site to try again", "") },
                 200: function (data) {
-                    if (data.res) disp_status("", "bg-success", "Successfully booked", "")
-                    else disp_status("", "bg-danger", data.msg, "")
+                    if (data.res) disp_status("", "bg-success", "Successfully booked", "");
+                    else disp_status("", "bg-danger", data.msg, "");
                 }
             }
         });
-        exit = true;
     };
     $("#cancel").click(function () {
         clearTimeout(tt1);
         clearTimeout(tt2);
-        document.getElementById("status_code").innerHTML = "Stopped";
-        document.getElementById("cancel").style.display = "none";
-        document.getElementById("status_text").innerHTML = "Reload to try again.";
-    });
+        disp_status("", "bg-warning", "Cancelled", "Reload to try again");
+    }).hide();
+
+    function exit_cancel(){
+        exit = true;
+        $("#cancel").hide();
+    };
+
+    function get_time_delay() {
+        if (bookable === null) {
+            // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
+            var slot_date = new Date(time_key);
+            var next_date = new Date(Date.now() + 24 * 60 * 60 * 1000 - 30 * 1000);
+            return Math.ceil((slot_date - next_date) / 1000);
+        } else return 90
+    };
     function wait_to_book() {
         var attempts = 0;
         var seconds = get_time_delay();
         var counter = seconds;
-        disp_status("", "bg-warning", "Counting Down", seconds.toString() + "second(s)")
+        disp_status("", "bg-warning", "Counting Down", seconds.toString() + "second(s)");
+        $("#cancel").fadeIn(750);
         var interval = 1000; // ms
         var expected = Date.now() + interval;
         tt1 = setTimeout(step, interval);
         function step() {
             var dt = Date.now() - expected; // the drift (positive for overshooting)
             counter--;
-            document.getElementById("status_text").innerHTML = counter.toString() + "second(s)";
+            document.getElementById("status_text").innerHTML = counter.toString() + " second(s)";
             if (counter <= 0) {
                 attempts++;
                 document.getElementById("status_code").innerHTML = "Trying to book";
                 counter = seconds;
-                $.ajax({
-                    url: "{{url_for('booking.get_timeslot_data')}}",
-                    type: "POST",
-                    data: { "location": loc_key, "timeslot": time_key },
-                    statusCode: {
-                        204: function () {
-                            disp_status("", "bg-danger", "204 - Reload site to try again", "")
-                            exit = true;
-                        },
-                        200: function (data) {
-                            if (data.url === null) {
+                fetch(`{{url_for('booking.api')}}?location=${loc_key}&timeslot=${time_key}`).then(response => {
+                    if (response.status !== 200) {
+                        disp_status("", "bg-danger", `${response.status} - Reload site to try again`, "");
+                        exit_cancel();
+                    } else
+                        response.json().then(data => {
+                            if (data === null) {
                                 disp_status("", "bg-danger", "Timeslot expired, stopping", "")
-                                exit = true; // It's not true, but just imagine that it is.
-                            } else if (data.slots != "0") book();
-                            else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
-                        }
-                    }
-                }
-                );
+                                exit_cancel();
+                            } else if (data) {
+                                book();
+                            } else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
+                        });
+                });
             }
             if (exit) {
                 clearTimeout(tt1);
@@ -289,7 +290,8 @@
             }
             expected += interval;
             tt2 = setTimeout(step, Math.max(0, interval - dt)); // take into account drift
-        }
-    };
+
+        };
+    }
 </script>
 {%endif%}{% endblock %}

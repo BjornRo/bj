@@ -30,6 +30,8 @@
                 </div>
             </template>
         </div>
+
+
         <div class="d-flex justify-content-center mb-3" id="sentinel">
             <div class="spinner-border" role="status"></div>
         </div>
@@ -97,13 +99,11 @@
 <script type="text/javascript">
     var scroller = document.querySelector("#scroller");
     var template = document.querySelector("#post_template");
-
     var sentinel = document.querySelector("#sentinel");
-
     var counter = 0;
 
     function loadItems() {
-        fetch(`/load?c=${counter}`).then((response) => {
+        fetch(`/api?c=${counter}`).then((response) => {
             response.json().then((data) => {
 
                 if (!data.length) {
@@ -122,30 +122,26 @@
         })
     };
     var intersectionObserver = new IntersectionObserver(entries => {
-        if (entries[0].intersectionRatio <= 0) {
-            return;
-        }
+        if (entries[0].intersectionRatio <= 0) return;
         loadItems();
     });
     intersectionObserver.observe(sentinel);
 
 
-    $("#postbtn").click(function (e) {
-        e.preventDefault();
-        var formdata = document.getElementById("posttext").value;
-        if (formdata.length == 0) {
-            alert("Please enter text!")
-        }
-        $.ajax({
-            url: "{{url_for('views.load')}}",
-            method: "POST",
-            data: { "text": formdata },
-            success: function (data) {
-
-            }
-
-        });
-    });
+    // $("#postbtn").click(function (e) {
+    //     e.preventDefault();
+    //     var formdata = document.getElementById("posttext").value;
+    //     if (formdata.length == 0) {
+    //         alert("Please enter text!")
+    //     }
+    //     $.ajax({
+    //         url: "{{url_for('views.api')}}",
+    //         method: "POST",
+    //         data: { "text": formdata },
+    //         success: function (data) {
+    //         }
+    //     });
+    // });
 
 </script>
 {%endif%}

@@ -252,22 +252,25 @@ class MainController:
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
         return None
 
-    def get_timeslot_data(self, loc: str, ts: datetime) -> Union[dict, None]:
+    def get_url(self, loc: str, time: datetime) -> Union[str, None]:
+        return self.control.data.get(loc).get(time).get('url')
+
+    def get_bookable(self, loc: str, ts: datetime) -> Union[dict, None]:
         if isinstance(loc, str) and isinstance(ts, datetime):
-            return {k: v for k, v in self.control.data.get(loc).get(ts).items() if k != "end_time"}
+            e = self.control.data.get(loc).get(ts)
+            if not e:
+                return e["url"] and e["slots"] != "0"
         return None
 
-    def get_payload_dict(self) -> dict:
+    def get_printables_dict(self) -> dict:
         return {
             location: {
                 st_time.isoformat(): {
-                    "p": (
+                    "print": (
                         f"{self.days.get(st_time.weekday() + self.control.first_wkday_num)}, "
-                        f"{self.time_interval(st_time, st_dict['end_time'])}, "
-                        f"slots: {st_dict['slots'] if st_dict['url'] else 'not unlocked'}"
+                        f"{self.time_interval(st_time, st_dict['end_time'])}"
                     ),
-                    "u": st_dict["url"],
-                    "b": True if st_dict["url"] and (st_dict["slots"] != "0") else False,
+                    "slots": st_dict['slots'] if st_dict['url'] else 'not unlocked',
                 }
                 for st_time, st_dict in time_dict.items()
             }

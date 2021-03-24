@@ -19,9 +19,8 @@ def main():
 def schedule_setup(app):
     def querydb():
         time_now = datetime.now().replace(microsecond=0, second=0)
-        tsdb = Timestamp(time=time_now)
         with app.app_context():
-            db.session.add(tsdb)
+            db.session.add(Timestamp(time=time_now))
             for i, (key, value) in enumerate(tuple(TmpData.tmp.items())[1:]):
                 keydict = {"measurer": key.split("/")[0], "time": time_now}
                 temp, humid, press = None, None, None
@@ -51,7 +50,7 @@ def schedule_setup(app):
 # This agent only needs threading. Multiprocessing is nicer but I don't expect too much concurrency
 # on this webapp. Small microseconds delay are no problem at home.
 def mqtt_agent():
-    from ast import literal_eval as l_eval
+    from ast import literal_eval
     import paho.mqtt.client as mqtt
 
     def on_connect(client, *_):
@@ -59,7 +58,7 @@ def mqtt_agent():
             client.subscribe("home/" + s)
 
     def on_message(client, userdata, msg):
-        val = l_eval(msg.payload.decode("utf-8"))
+        val = literal_eval(msg.payload.decode("utf-8"))
         m = msg.topic.replace("home/", "")
         # Would be perfect for pattern matching! 4 different structures.
         for i, sub in enumerate(TmpData().subs):

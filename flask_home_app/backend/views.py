@@ -20,10 +20,10 @@ def home():
 @views.route("/notes", methods=["GET","POST"])
 def notes():
     local = request.remote_addr.split(".")[:2] in local_addr
-    return render_template('notes.html', local=local, data={})
+    return render_template('notes.html', local=local)
 
-@views.route("/load")
-def load():
+@views.route("/api", methods=['GET','POST'])
+def api():
     if request.remote_addr.split(".")[:2] in local_addr:
         if request.args and request.args.get('c').isdigit():
             count = int(request.args.get('c'))
