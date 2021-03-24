@@ -1,28 +1,21 @@
-{% extends "base.html" %}
-{% block header %}
-{% if local %}
+{% extends "base.html" %} {% block header %} {% if local %}
 <style>
+    .colf {
+        width: 460px;
+    }
 </style>
-{% endif %}
-{% endblock %}
-{% block title %}{{title}}{% endblock %}
-{% block content %}
-{% if local %}
+{% endif %} {% endblock %} {% block title %}{{title}}{% endblock %} {% block content %} {% if local %}
 
-<div class="row" style="max-width: fit-content;">
-    <div id="col1" class="ml-4 mt-3" style="width: 32rem;">
+<div class="row g-0">
+    <div id="col" class="col-0 colf">
 
         <div id="scroller">
             <template id="post_template">
-                <div class="card ml-2 mt-2 shadow">
-                    <div id="title" class="card-header">
-                        Header
-                    </div>
-                    <div id="content" class="card-body">
-                        Hello
-                    </div>
-                    <div class="card-footer text-muted">
-                        <div class="btn-group" role="group" aria-label="Basic example">
+                <div class="card m-2 shadow" id="post_id">
+                    <h5 id="title" class="card-header"></h5>
+                    <div id="content" class="card-body"></div>
+                    <div class="card-footer">
+                        <div class="btn-group" role="group">
                             <button id="delpost" type="button" class="btn btn-danger">Delete</button>
                             <button id="editpost" type="button" class="btn btn-info">Edit Post</button>
                         </div>
@@ -32,8 +25,8 @@
         </div>
 
 
-        <div class="d-flex justify-content-center mb-3" id="sentinel">
-            <div class="spinner-border" role="status"></div>
+        <div class="d-flex justify-content-center my-3" id="sentinel">
+            <div class="" role="status"></div>
         </div>
 
 
@@ -41,17 +34,13 @@
 
 
 
-
-
-
-
     <!-- col 2 -->
-    <div id="col2" class="ml-3 mt-3" style="width: 32rem;">
-        <div class="card position-sticky mt-2 shadow">
-            <h5 class="card-header">Add post</h5>
+    <div id="col" class="col-0 colf">
+        <div class="card sticky-top mt-2 shadow">
+            <h5 class="card-header d-inline">Add post</h5>
             <div class="card-body" style="float:right;">
-                <textarea id="posttext" rows="10" cols="50"
-                    style="resize: none; font-family: monospace; font-size: 16px;" placeholder="Text here"></textarea>
+                <textarea id="posttext" class="form-control fs-5" placeholder="Text here" style="resize: none;"
+                    rows=8></textarea>
             </div>
             <div class="card-footer text-muted">
                 <button id="postbtn" class="btn btn-primary" style="float: right;">Post</a>
@@ -91,58 +80,60 @@
         <h5 class="card-title">Only accessible from local network!</h5>
     </div>
 </div>
-{%endif%}
-{% endblock %}
-
-{% block script %}
-{% if local %}
+{%endif%} {% endblock %} {% block script %} {% if local %}
 <script type="text/javascript">
     var scroller = document.querySelector("#scroller");
     var template = document.querySelector("#post_template");
     var sentinel = document.querySelector("#sentinel");
     var counter = 0;
 
+    $("#postbtn").click(function (e) {
+        e.preventDefault();
+        var formdata = document.getElementById("posttext").value;
+        if (formdata.length <= 1) {
+            alert("Please enter text!");
+            return;
+        }
+        //this.disabled = true;
+        fetch("{{url_for('views.api')}}", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newpost: formdata }),
+        }).then(response => {
+            if (response.status !== 200) alert("Submitting post failed")
+            else {
+                this.disabled = false;
+                document.getElementById("posttext").value = "";
+                alert("Note successfully submitted")
+                response.json().then(data => {
+                    add_post(data);
+                })
+            }
+        });
+    });
     function loadItems() {
         fetch(`/api?c=${counter}`).then((response) => {
             response.json().then((data) => {
-
-                if (!data.length) {
-                    sentinel.innerHTML = "No more posts";
-                }
-                for (var i = 0; i < data.length; i++) {
-                    let template_clone = template.content.cloneNode(true);
-                    template_clone.querySelector("#title").innerHTML = `${data[i][0]}`;
-                    template_clone.querySelector("#content").innerHTML = `${data[i][1]}`;
-                    template_clone.querySelector("#delpost").id = `${data[i][0]}`;
-                    template_clone.querySelector("#editpost").id = `${data[i][0]}`;
-                    scroller.appendChild(template_clone);
-                    counter++;
-                }
-            })
-        })
+                //if (data.length < 10) sentinel.innerHTML = "No more posts";
+                for (var i = 0; i < data.length; i++) add_post(data[i]);
+            });
+        });
     };
-    var intersectionObserver = new IntersectionObserver(entries => {
+    function add_post(data) {
+        let template_clone = template.content.cloneNode(true);
+        template_clone.querySelector("#title").innerHTML =
+            data.time + `<span class="d-inline text-muted float-end" style="font-size: small;" id=${counter}>#${counter + 1}</span>`;
+        template_clone.querySelector("#content").innerHTML = data.text.replace(/\n/g, "<br />");
+        template_clone.querySelector("#delpost").value = data.time;
+        template_clone.querySelector("#editpost").value = data.time;
+        template_clone.querySelector("#post_id").id = data.time;
+        scroller.appendChild(template_clone);
+        counter++;
+    };
+    const observer = new IntersectionObserver(entries => {
         if (entries[0].intersectionRatio <= 0) return;
         loadItems();
     });
-    intersectionObserver.observe(sentinel);
-
-
-    // $("#postbtn").click(function (e) {
-    //     e.preventDefault();
-    //     var formdata = document.getElementById("posttext").value;
-    //     if (formdata.length == 0) {
-    //         alert("Please enter text!")
-    //     }
-    //     $.ajax({
-    //         url: "{{url_for('views.api')}}",
-    //         method: "POST",
-    //         data: { "text": formdata },
-    //         success: function (data) {
-    //         }
-    //     });
-    // });
-
+    observer.observe(sentinel);
 </script>
-{%endif%}
-{% endblock %}
+{%endif%} {% endblock %}

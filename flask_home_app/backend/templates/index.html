@@ -1,157 +1,93 @@
-{% extends "base.html" %}
-
-{% block header %}
+{% extends "base.html" %} {% block header %}
 <style>
-    .left {
-
-        grid-area: status;
-    }
-
-    .middle {
-        text-align: left;
-        grid-area: control;
-    }
-
-    .middle-content {
-        grid-area: content;
-    }
-
-    .right {
-        grid-area: extra;
-    }
-
-    .grid-container {
-        display: grid;
-        grid-template-columns: 0.1fr 0.6fr 0.2fr;
-        grid-template-rows: 0.97fr 0.5fr 0.5fr 0.4fr;
-        grid-template-areas:
-            'status control control extra'
-            'status content content extra'
-            'status content content extra'
-            'status content content extra';
-        grid-gap: 10px;
-        padding: 10px;
-    }
-
-    li {
-        text-align: center;
-    }
-
-    .grid-container>div {
-        padding: 20px 0;
-    }
-
-    .alert-box {
-        padding: 10px;
-        margin-top: 340px;
-        margin-bottom: 20px;
-        margin-left: 5px;
-        border: 2px solid transparent;
-        border-radius: 4px;
-    }
-
     .success {
         color: #3d9b3f;
         background-color: #c1e6b4;
         border-color: #d6e9c6;
         display: none;
     }
-</style>{% endblock %}
-{% block title %}{{title}}{% endblock %}
-{% block content %}
-<div class="grid-container">
-    <div class="left">
-        <div class="card m-2 bg-light " style="width: 12rem;">
-            <div class="card-header h6">
-                Air Pressure
+
+    .col1 {
+        width: 14rem;
+    }
+</style>{% endblock %} {% block title %}{{title}}{% endblock %} {% block content %}
+
+<div class="row g-0">
+    <div class="col-2 col1">
+        <div class="card m-2 bg-light shadow text-center">
+            <h5 class="card-header">Air Pressure</h5>
+            <div class="card-body">
+                <p id="press" class="d-inline">{{data[2][2]|round(1)}}</p>hPa
             </div>
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item">
-                    <p id="press">{{data[2][2]|round(1)}}</p>hPa
-                </li>
-            </ul>
         </div>
-        <div class="card m-2 bg-light" style="width: 12rem;">
-            <div class="card-header h6">
-                Humidity
+        <div class="card m-2 bg-light shadow text-center">
+            <h5 class="card-header">Humidity</h5>
+            <div class="card-body">
+                <p id="humid" class="d-inline">{{data[2][1]|round(1)}}</p>%
             </div>
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item">
-                    <p id="humid">{{data[2][1]|round(1)}}</p>%
-                </li>
-            </ul>
         </div>
-        <div class="card m-2 bg-light" style="width: 12rem;">
-            <div class="card-header h6">
-                Temperatures
-            </div>
+        <div class="card m-2 bg-light shadow text-center">
+            <h5 class="card-header">Temperatures</h5>
             <ul class="list-group list-group-flush">
-                <li class="list-group-item">Kitchen: <p id="ktemp">{{data[2][0]|round(1)}}</p>°C</li>
-                <li class="list-group-item">Balcony: <p id="btemp">{{data[1][1]|round(1)}}</p>°C</li>
-                <li class="list-group-item">Outdoors: <p id="otemp">{{data[3]|round(1)}}</p>°C</li>
+                <li class="list-group-item">Kitchen:
+                    <p id="ktemp" class="d-inline">{{data[2][0]|round(1)}}</p>°C
+                </li>
+                <li class="list-group-item">Balcony:
+                    <p id="btemp" class="d-inline">{{data[1][1]|round(1)}}</p>°C
+                </li>
+                <li class="list-group-item">Outdoors:
+                    <p id="otemp" class="d-inline">{{data[3]|round(1)}}</p>°C
+                </li>
             </ul>
         </div>
     </div>
-    <div class="middle">
-        <div class="card mt-2 bg-light" style="width: 28rem; height: 10rem;">
-            <div class="card-header h6">
-                Status balcony
+    <div class="col-2 col2">
+        <div class="card-group mt-2 shadow text-center" style="width: 24rem;">
+            <div class="card">
+                <div class="card-header h6">Full light</div>
+                <div class="card-body" id="full_light_status">{{rel_status[0]}}</div>
             </div>
-            <div class="card-body">
-                <div class="card-group">
-                    <div class="card" style="height: 5rem;">
-                        <div class="card-header bg-light h6" style="height: 2.5rem;">Full light</div>
-                        <p class="card-text m-2 ml-3" id="full_light_status">{% if rel_status[0] <= 0 %}Inactive{% else
-                                %} Active{%endif%}</p>
-                    </div>
-                    <div class="card" style="height: 5rem;">
-                        <div class="card-header bg-light h6" style="height: 2.5rem;">Low light</div>
-                        <p class="card-text m-2 ml-3" id="low_light_status">{% if rel_status[1] <= 0 %}Inactive{% else
-                                %} Active{%endif%}</p>
-                    </div>
-                    <div class="card" style="height: 5rem;">
-                        <div class="card-header bg-light h6" style="height: 2.5rem;">Heater</div>
-                        <p class="card-text m-2 ml-3" id="heater_status">{% if rel_status[3] <= 0 %}Inactive{% else %}
-                                Active{%endif%}</p>
-                    </div>
-                </div>
+            <div class="card">
+                <div class="card-header h6">Low light</div>
+                <div class="card-body" id="low_light_status">{{rel_status[1]}}</div>
             </div>
-        </div>{% if local %}
-        <div class="btn-group ml-2 mt-2" role="group">
+            <div class="card">
+                <div class="card-header h6">Heater</div>
+                <div class="card-body" id="heater_status">{{rel_status[3]}}</div>
+            </div>
+        </div>
+        {% if local %}
+        <div class="btn-group mt-2" role="group" style="width: 18rem;">
             <button type="button" class="btn btn-warning cbutton" id="full_light" value="on">Full light</button>
             <button type="button" class="btn btn-warning cbutton" id="low_light" value="on">Low light</button>
             <button type="button" class="btn btn-warning cbutton" id="heater" value="on">Heater</button>
         </div><br style="clear: both;">
-        <div class="btn-group ml-2 mt-2" role="group">
+        <div class="btn-group mt-2" role="group" style="width: 24rem;">
             <button type="button" class="btn btn-danger cbutton" id="full_light" value="off">Full light off</button>
             <button type="button" class="btn btn-danger cbutton" id="low_light" value="off">Low light off</button>
             <button type="button" class="btn btn-danger cbutton" id="heater" value="off">Heater off</button>
             <button type="button" class="btn btn-danger cbutton" id="alloff" value="off">Everything off</button>
         </div>
-        <h6>
-            <br>
-            <div class="alert-box success">Command sent.</div>
-        </h6>
+        <div class="card mt-2 success">
+            <div class="card-body h5">Command sent.</div>
+        </div>
         {% endif %}
     </div>
-    <div class="middle-content"></div>
-    <div class="right"></div>
 </div>
-{% endblock %}
-{% block script %}
-{% if local %}
+{% endblock %} {% block script %} {% if local %}
 <script type="text/javascript">
     $(".cbutton").click(function () {
         $.ajax({
             type: "POST",
             url: "{{ url_for('views.post_command') }}",
-            data: { entity: $(this).attr('id'), command: $(this).val() },
+            data: {
+                entity: $(this).attr('id'),
+                command: $(this).val()
+            },
             success: $("div.success").fadeIn(300).delay(2500).fadeOut(500),
         });
         return false;
     });
-</script>{%endif%}
-<script type="text/javascript">
     setInterval(function () {
         $.getJSON("{{ url_for('views.home_status') }}", function (data) {
             document.getElementById("press").innerHTML = Math.round(data['kitchen/temphumidpress'][2] * 10) / 10;
@@ -164,4 +100,4 @@
             document.getElementById("heater_status").innerHTML = (data['balcony/relaystatus'][3] <= 0) ? "Inactive" : "Active";
         });
     }, 5000);
-</script>{% endblock %}
+</script>{%endif%} {% endblock %}

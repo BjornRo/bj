@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from flask import Blueprint, render_template, request, jsonify
 from . import TmpData, local_addr, db
 import paho.mqtt.publish as publish
@@ -5,6 +6,7 @@ from .models import Notes, Timestamp
 
 
 views = Blueprint("views", __name__)
+
 
 @views.route("/")
 def home():
@@ -14,28 +16,65 @@ def home():
         title="Home",
         data=list(TmpData().tmp.values()),
         local=local,
-        rel_status=TmpData().tmp["balcony/relaystatus"],
+        rel_status=[
+            "Inactive" if x <= 0 else "Active" for x in TmpData().tmp["balcony/relaystatus"]
+        ],
     )
 
-@views.route("/notes", methods=["GET","POST"])
+
+@views.route("/notes", methods=["GET", "POST"])
 def notes():
     local = request.remote_addr.split(".")[:2] in local_addr
-    return render_template('notes.html', local=local)
+    return render_template("notes.html", local=local)
 
-@views.route("/api", methods=['GET','POST'])
+
+def datetime_to_natural(dt):
+    months = {
+        1: "January",
+        2: "February",
+        3: "March",
+        4: "April",
+        5: "May",
+        6: "Juny",
+        7: "July",
+        8: "August",
+        9: "September",
+        10: "October",
+        11: "November",
+        12: "December",
+    }
+    return f"{dt.year} {months.get(dt.month)} {dt.strftime('%d %H:%M')}"
+
+
+@views.route("/api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 def api():
     if request.remote_addr.split(".")[:2] in local_addr:
-        if request.args and request.args.get('c').isdigit():
-            count = int(request.args.get('c'))
-            print(count)
-            n_posts = db.session.query(Notes).count()
-            print("Nposts")
-            print(n_posts)
-            if count == n_posts:
-                return jsonify([(i,[str(i)]*10) for i in range(20)])
-            return jsonify(db.session.query(Notes).order_by(Notes.time).limit(10).offset(count))
-    return ("",204)
+        if request.method == "GET" and request.args.get("c") and request.args.get("c").isdigit():
+            count = int(request.args.get("c"))
+            if count == db.session.query(Notes).count():
+                return {}
+            return jsonify(
+                [
+                    {"time": datetime_to_natural(note.time), "text": note.text}
+                    for note in db.session.query(Notes)
+                    .order_by(Notes.time.asc())
+                    .limit(10)
+                    .offset(count)
+                    .all()
+                ]
+            )
+        if request.method == "POST":
+            if request.json.get("newpost"):
+                value = request.json.get("newpost")
+                if value and isinstance(value, str) and len(value) >= 1:
+                    note = Notes(time=datetime.now(), text=value)
+                    db.session.add(note)
+                    db.session.commit()
+                    return {"time": datetime_to_natural(note.time), "text": note.text}
+    return ("", 204)
 
+
+# [(i, [str(i)] * 10) for i in range(20)]
 
 # Everyone can get this data
 @views.route("/home_status")

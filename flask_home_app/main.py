@@ -4,16 +4,22 @@ from threading import Thread
 from backend import db, TmpData, create_app
 from backend.models import *
 import schedule
+import sys
 
 
 def main():
-    app = create_app()
+    try:
+        app = create_app()
 
-    app.config["TEMPLATES_AUTO_RELOAD"] = True
-    Thread(target=mqtt_agent).start()
-    Thread(target=schedule_setup, args=(app,)).start()
+        app.config["TEMPLATES_AUTO_RELOAD"] = True
 
-    app.run(debug=True, use_reloader=False)
+        Thread(target=mqtt_agent, daemon=True).start()
+        Thread(target=schedule_setup, args=(app,), daemon=True).start()
+
+        app.run(debug=True, use_reloader=False)
+    except KeyboardInterrupt:
+        sys.exit(1)
+
 
 
 def schedule_setup(app):

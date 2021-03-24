@@ -65,11 +65,11 @@
     }
 
     .col1f {
-        width: 380px;
+        width: 440px;
     }
 
     .col2f {
-        width: 280px;
+        width: 320px;
     }
 
     .adjtxt {
@@ -85,10 +85,10 @@ local %}
 <div class="row g-0">
     <div class="col-4 col1f"> {% for i,(loc_key,slot_list) in enumerate(data.items()) %}
         <div class="card m-2">
-            <h5 class="card-header" id="loc{{i}}">{{loc_key}}</h5>
+            <h4 class="card-header" id="loc{{i}}">{{loc_key}}</h5>
             <ul class="list-group list-group-flush"> {% for j,time_key in enumerate(slot_list) %}
                 <li class="list-group-item">
-                    <p class="d-inline h6 adjtxt" id="loc{{i}},{{j}}">
+                    <p class="d-inline adjtxt h5" id="loc{{i}},{{j}}">
                         {{data[loc_key][time_key]['print']}}, slots: {{data[loc_key][time_key]['slots']}}
                     </p>
                     <button class="btn btn-success btn-sm kbtn float-end" value="loc{{i}},{{j}}"
@@ -99,8 +99,8 @@ local %}
     </div>
     <div class="col-4 mt-2 col2f hidden" id="column2">
         <div class="card">
-            <div class="card-header h5" id="location"></div>
-            <div class="card-body h6 adjtxt" id="timeslot"></div>
+            <div class="card-header h4" id="location"></div>
+            <div class="card-body h5 adjtxt" id="timeslot"></div>
         </div>
         <div class="card mt-2" id="cardform">
             <form id="fform" class="m-2">
