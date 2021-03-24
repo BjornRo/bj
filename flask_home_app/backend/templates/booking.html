@@ -80,31 +80,22 @@
     .hidden {
         display: none;
     }
-</style>
-{% endif %}
-{% endblock %}
-{% block title %}{{title}}{% endblock %}
-{% block content %}
-{% if not failed %}
-{% if local %}
+</style>{% endif %}{% endblock %}{% block title %}{{title}}{% endblock %}{% block content %}{% if not failed %}{% if
+local %}
 <div class="row g-0">
-    <div class="col-4 col1f">
-        {% for i,(loc_key,slot_list) in enumerate(data.items()) %}
+    <div class="col-4 col1f"> {% for i,(loc_key,slot_list) in enumerate(data.items()) %}
         <div class="card m-2">
             <h5 class="card-header" id="loc{{i}}">{{loc_key}}</h5>
-            <ul class="list-group list-group-flush">
-                {% for j,time_key in enumerate(slot_list) %}
+            <ul class="list-group list-group-flush"> {% for j,time_key in enumerate(slot_list) %}
                 <li class="list-group-item">
                     <p class="d-inline h6 adjtxt" id="loc{{i}},{{j}}">
                         {{data[loc_key][time_key]['print']}}, slots: {{data[loc_key][time_key]['slots']}}
                     </p>
                     <button class="btn btn-success btn-sm kbtn float-end" value="loc{{i}},{{j}}"
                         name="{{time_key}}">Book</button>
-                </li>
-                {% endfor %}
+                </li>{% endfor %}
             </ul>
-        </div>
-        {% endfor %}
+        </div>{% endfor %}
     </div>
     <div class="col-4 mt-2 col2f hidden" id="column2">
         <div class="card">
@@ -135,42 +126,29 @@
         </div>
         <button type="button" id="cancel" class="btn btn-danger mt-2 hidden">Cancel</button>
     </div>
-</div>
-{% else %}
+</div>{% else %}
 <div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
     <div class="card-header">
         <h5 class="card-title">Only accessible from local network!</h5>
     </div>
-</div>
-{%endif%}
-{% else %}
+</div>{%endif%}{% else %}
 <div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
     <div class="card-header">
         <h5 class="card-title">Failed to get bookings.</h5>
     </div>
-</div>
-{%endif%}
-{% endblock %}
-{% block script %}
-{% if local %}
+</div>{%endif%}{% endblock %}{% block script %}{% if local %}
 <script type="text/javascript">
     var loc_key;
     var time_key;
-    var slot_string
     var bookable;
     var exit = false;
-    var tt1;
-    var tt2;
     // Will store credentials in token on server later.
     var user;
     var pass;
-
-    // Get data and show column
     $(".kbtn").click(function () {
         $("#column2").hide();
-        get_slot_data($(this));
+        document.getElementById("timeslot").innerHTML = get_slot_data($(this));
         document.getElementById("location").innerHTML = loc_key;
-        document.getElementById("timeslot").innerHTML = slot_string;
         if (bookable) disp_status("Submit", "bg-success", "Bookable", "");
         else if (bookable === null) disp_status("Wait to book", "bg-warning", "Not unlocked", "");
         else disp_status("Try to book", "bg-warning", "Full", "");
@@ -180,10 +158,10 @@
         loc_key = document.getElementById(item.val().split(",").shift()).innerHTML;
         time_key = item.attr("name");
         var slot_data = document.getElementById(item.val()).innerHTML.trim().split(", slots: ");
-        slot_string = slot_data[0];
         if (slot_data[1] == "0") bookable = false;
         else if (slot_data[1] == "not unlocked") bookable = null;
         else bookable = true;
+        return slot_data[0];
     };
     function disp_status(submit, status, msg, txt) {
         $("#status").hide();
@@ -196,8 +174,6 @@
             $("#status_info").collapse("show");
         } else $("#status_info").collapse("hide");
     };
-
-    // Booking routine
     $("#submit_data").click(function (e) {
         e.preventDefault();
         if (document.forms["fform"]["user"].value == "") {
@@ -224,7 +200,7 @@
             type: "POST",
             data: { "user": user, "pass": pass, "loc_key": loc_key, "time_key": time_key },
             statusCode: {
-                204: function () { disp_status("", "bg-danger", "204 - Reload site to try again", "") },
+                204: function () { disp_status("", "bg-danger", "204 - Reload site to try again", ""); },
                 200: function (data) {
                     if (data.res) disp_status("", "bg-success", "Successfully booked", "");
                     else disp_status("", "bg-danger", data.msg, "");
@@ -233,16 +209,13 @@
         });
     };
     $("#cancel").click(function () {
-        clearTimeout(tt1);
-        clearTimeout(tt2);
+        exit_cancel();
         disp_status("", "bg-warning", "Cancelled", "Reload to try again");
-    }).hide();
-
-    function exit_cancel(){
+    });
+    function exit_cancel() {
         exit = true;
         $("#cancel").hide();
     };
-
     function get_time_delay() {
         if (bookable === null) {
             // next date is incremented since slot is opened 24h before. Remove 30s to add some wiggleroom.
@@ -255,14 +228,15 @@
         var attempts = 0;
         var seconds = get_time_delay();
         var counter = seconds;
-        disp_status("", "bg-warning", "Counting Down", seconds.toString() + "second(s)");
+        disp_status("", "bg-warning", "Counting Down", seconds.toString() + " second(s)");
         $("#cancel").fadeIn(750);
         var interval = 1000; // ms
         var expected = Date.now() + interval;
-        tt1 = setTimeout(step, interval);
+        setTimeout(step, interval);
         function step() {
             var dt = Date.now() - expected; // the drift (positive for overshooting)
             counter--;
+            if (exit) return;
             document.getElementById("status_text").innerHTML = counter.toString() + " second(s)";
             if (counter <= 0) {
                 attempts++;
@@ -275,22 +249,15 @@
                     } else
                         response.json().then(data => {
                             if (data === null) {
-                                disp_status("", "bg-danger", "Timeslot expired, stopping", "")
+                                disp_status("", "bg-danger", "Timeslot expired, stopping", "");
                                 exit_cancel();
-                            } else if (data) {
-                                book();
-                            } else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
+                            } else if (data) book();
+                            else document.getElementById("status_code").innerHTML = "Full, " + attempts.toString() + " attempts";
                         });
                 });
             }
-            if (exit) {
-                clearTimeout(tt1);
-                clearTimeout(tt2);
-                return;
-            }
             expected += interval;
-            tt2 = setTimeout(step, Math.max(0, interval - dt)); // take into account drift
-
+            setTimeout(step, Math.max(0, interval - dt)); // take into account drift
         };
     }
 </script>
