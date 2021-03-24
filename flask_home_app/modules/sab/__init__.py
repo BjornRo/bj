@@ -92,10 +92,14 @@ class QueryPostSiteF(QueryPost):
         hostname: str,
         path: str,
         query: str,
+        strip_url: str,
+        suffix: str,
         timeform: str,
     ):
         super().__init__(first_wkday_num, protocol, hostname, path, query, timeform)
         self.queries = None
+        self.strip_url = strip_url
+        self.suffix = suffix
 
     def update_time(self) -> None:
         super().update_time()
@@ -126,7 +130,12 @@ class QueryPostSiteF(QueryPost):
                 url = None
                 # If there is no message, then there exist a link. Add the link.
                 if not j.find("span", class_="message"):
-                    url = self.main_url + j.find("div", class_="button-holder").find("a")["href"]
+                    url = (
+                        j.find("div", class_="button-holder")
+                        .find("a")["href"]
+                        .replace(self.strip_url, "")
+                        .replace(self.suffix, "")
+                    )
                 # Check status, if neither are true: then booking slot hasn't unlocked yet.
                 elif "inactive" in j["class"] or re.search(
                     "drop", j.find("span", class_="message").text, re.I
@@ -161,7 +170,9 @@ class QueryPostSiteF(QueryPost):
         if not (isinstance(booking_url, str) and isinstance(user, str) and isinstance(passw, str)):
             return (False, "Error: Invalid booking url, and/or invalid logindata")
         try:
-            response = requests.get(booking_url, self.timeout)
+            response = requests.get(
+                self.main_url + self.strip_url + booking_url + self.suffix, self.timeout
+            )
         except:
             return (False, "Failed to get booking link")
 
@@ -211,8 +222,12 @@ class MainController:
         hostname: str,
         path: str,
         query: str,
+        strip_part: str,
+        suffix: str,
     ):
-        self.control = QueryPostSiteF(first_wkday_num, protocol, hostname, path, query, "%H:%M")
+        self.control = QueryPostSiteF(
+            first_wkday_num, protocol, hostname, path, query, strip_part, suffix, "%H:%M"
+        )
         self.days = {
             i + first_wkday_num: v
             for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
@@ -237,22 +252,22 @@ class MainController:
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
         return None
 
-    def get_timeslot_data(self, location, timeslot) -> Union[dict, None]:
-        if isinstance(location, str) and isinstance(timeslot, datetime):
-            return self.control.data.get(location).get(timeslot)
+    def get_timeslot_data(self, loc: str, ts: datetime) -> Union[dict, None]:
+        if isinstance(loc, str) and isinstance(ts, datetime):
+            return {k: v for k, v in self.control.data.get(loc).get(ts).items() if k != "end_time"}
         return None
 
     def get_payload_dict(self) -> dict:
         return {
             location: {
                 st_time.isoformat(): {
-                    "print": (
+                    "p": (
                         f"{self.days.get(st_time.weekday() + self.control.first_wkday_num)}, "
                         f"{self.time_interval(st_time, st_dict['end_time'])}, "
                         f"slots: {st_dict['slots'] if st_dict['url'] else 'not unlocked'}"
                     ),
-                    "url": st_dict["url"],
-                    "bookable": True if st_dict["url"] and (st_dict["slots"] != "0") else False,
+                    "u": st_dict["url"],
+                    "b": True if st_dict["url"] and (st_dict["slots"] != "0") else False,
                 }
                 for st_time, st_dict in time_dict.items()
             }

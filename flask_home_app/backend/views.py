@@ -1,14 +1,14 @@
-from flask import Blueprint, render_template, request
-from . import TmpData
+from flask import Blueprint, render_template, request, jsonify
+from . import TmpData, local_addr, db
 import paho.mqtt.publish as publish
-from . import local_addr
+from .models import Notes, Timestamp
+
 
 views = Blueprint("views", __name__)
 
 @views.route("/")
 def home():
-    addr = request.remote_addr.split(".")[:2]
-    local = True if addr in local_addr else False
+    local = request.remote_addr.split(".")[:2] in local_addr
     return render_template(
         "index.html",
         title="Home",
@@ -17,9 +17,25 @@ def home():
         rel_status=TmpData().tmp["balcony/relaystatus"],
     )
 
-@views.route("/notes")
+@views.route("/notes", methods=["GET","POST"])
 def notes():
-    return ""
+    local = request.remote_addr.split(".")[:2] in local_addr
+    return render_template('notes.html', local=local, data={})
+
+@views.route("/load")
+def load():
+    if request.remote_addr.split(".")[:2] in local_addr:
+        if request.args and request.args.get('c').isdigit():
+            count = int(request.args.get('c'))
+            print(count)
+            n_posts = db.session.query(Notes).count()
+            print("Nposts")
+            print(n_posts)
+            if count == n_posts:
+                return jsonify([(i,[str(i)]*10) for i in range(20)])
+            return jsonify(db.session.query(Notes).order_by(Notes.time).limit(10).offset(count))
+    return ("",204)
+
 
 # Everyone can get this data
 @views.route("/home_status")

@@ -27,9 +27,7 @@
     <div id="content">{% block content %}{% endblock %}</div>
     <div id="footer">{% block footer %}{% endblock %}</div>
     <script type="text/javascript" src="{{ url_for('static', filename='jquery.js') }}"></script>
-    <script type="text/javascript" src="{{ url_for('static', filename='popper.js') }}"></script>
-    <script type="text/javascript" src="{{ url_for('static', filename='bootstrap.js') }}"></script>
-    <script type="text/javascript" src="{{ url_for('static', filename='index.js') }}"></script>{% block script
+    <script type="text/javascript" src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>{% block script
     %}{%endblock %}
 </body>
 
