@@ -53,6 +53,7 @@ def api():
             count = int(request.args.get("c"))
             if count == db.session.query(Notes).count():
                 return {}
+            print(count)
             return jsonify(
                 [
                     {"time": datetime_to_natural(note.time), "text": note.text}
@@ -103,4 +104,4 @@ def post_command():
             else:
                 return ""
             publish.single("home/balcony/relay", pub, hostname="www.home")
-    return ""
+    return ("", 500)

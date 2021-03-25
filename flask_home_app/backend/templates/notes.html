@@ -3,6 +3,11 @@
     .colf {
         width: 460px;
     }
+
+    .btn:focus {
+        outline: none;
+        box-shadow: none;
+    }
 </style>
 {% endif %} {% endblock %} {% block title %}{{title}}{% endblock %} {% block content %} {% if local %}
 
@@ -11,7 +16,7 @@
 
         <div id="scroller">
             <template id="post_template">
-                <div class="card m-2 shadow" id="post_id">
+                <div class="card m-2 shadow collapse" id="post_id">
                     <h5 id="title" class="card-header"></h5>
                     <div id="content" class="card-body"></div>
                     <div class="card-footer">
@@ -82,6 +87,7 @@
 </div>
 {%endif%} {% endblock %} {% block script %} {% if local %}
 <script type="text/javascript">
+    $(".btn").removeClass("ui-btn-active");
     var scroller = document.querySelector("#scroller");
     var template = document.querySelector("#post_template");
     var sentinel = document.querySelector("#sentinel");
@@ -90,7 +96,7 @@
     $("#postbtn").click(function (e) {
         e.preventDefault();
         var formdata = document.getElementById("posttext").value;
-        if (formdata.length <= 1) {
+        if (formdata.length <= -1) {
             alert("Please enter text!");
             return;
         }
@@ -107,17 +113,22 @@
                 alert("Note successfully submitted")
                 response.json().then(data => {
                     add_post(data);
-                })
+                    $("#" + i).collapse('show');
+                });
             }
         });
     });
+
     function loadItems() {
-        fetch(`/api?c=${counter}`).then((response) => {
-            response.json().then((data) => {
-                //if (data.length < 10) sentinel.innerHTML = "No more posts";
-                for (var i = 0; i < data.length; i++) add_post(data[i]);
+        fetch(`/api?c=${counter}`).
+            then((response) => {
+                response.json().then((data) => {
+                    //if (data.length < 10) sentinel.innerHTML = "No more posts";
+                    for (var i = 0; i < data.length; i++) {
+                        add_post(data[i]);
+                    }
+                });
             });
-        });
     };
     function add_post(data) {
         let template_clone = template.content.cloneNode(true);
@@ -126,8 +137,9 @@
         template_clone.querySelector("#content").innerHTML = data.text.replace(/\n/g, "<br />");
         template_clone.querySelector("#delpost").value = data.time;
         template_clone.querySelector("#editpost").value = data.time;
-        template_clone.querySelector("#post_id").id = data.time;
+        template_clone.querySelector("#post_id").id = "pid" + counter;
         scroller.appendChild(template_clone);
+        $("#pid" + counter).collapse('show');
         counter++;
     };
     const observer = new IntersectionObserver(entries => {
