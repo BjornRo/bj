@@ -114,6 +114,7 @@
                 this.disabled = false;
                 var hide_item = document.getElementById("pid" + id);
                 new bootstrap.Collapse(hide_item, "hide");
+                console.log(hide_item);
                 hide_item.querySelectorAll('[id]').forEach(elem => elem.removeAttribute("id"));
                 hide_item.querySelectorAll("button").forEach(elem => elem.removeAttribute("onclick"));
                 hide_item.removeAttribute("id");

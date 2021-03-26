@@ -21,10 +21,9 @@ def main():
         sys.exit(1)
 
 
-
 def schedule_setup(app):
     def querydb():
-        time_now = datetime.now().replace(microsecond=0, second=0)
+        time_now = datetime.now().isoformat("T", "minutes")
         with app.app_context():
             db.session.add(Timestamp(time=time_now))
             for i, (key, value) in enumerate(tuple(TmpData.tmp.items())[1:]):

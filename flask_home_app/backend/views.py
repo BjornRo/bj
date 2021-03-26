@@ -61,7 +61,7 @@ def notes_api():
             time_key, text = request.json.get("time_key"), request.json.get("text")
             if time_key and text and isinstance(text, str) and len(text) >= 1:
                 try:
-                    Notes.query.filter_by(time=datetime.fromisoformat(time_key)).first().text = text
+                    Notes.query.filter_by(time=time_key).first().text = text
                     db.session.commit()
                     return {}
                 except:
@@ -70,8 +70,8 @@ def notes_api():
             time_key = request.json.get("time_key")
             if time_key:
                 try:
-                    #Notes.query.filter_by(time=datetime.fromisoformat(time_key)).delete()
-                    #db.session.commit()
+                    db.session.delete(Notes.query.filter_by(time=time_key).first())
+                    db.session.commit()
                     return {}
                 except:
                     pass
