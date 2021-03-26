@@ -13,7 +13,7 @@
     <div id="col" class="col-0 colf">
         <div id="scroller">
             <template id="post_template">
-                <div class="card m-2 shadow collapse" id="post_id">
+                <div class="card m-2 shadow collapse" id="post_id" aria-expanded="false">
                     <h5 class="card-header"><span id="post_time"></span><span id="post_number"
                             class="d-inline text-muted float-end" style="font-size: small;"></span></h5>
                     <div id="post_text" class="card-body"></div>
@@ -100,7 +100,7 @@
     };
     $("#delbtn").click(function () {
         this.disabled = true;
-        var id = this.value;
+        var id = parseInt(this.value);
         var post_time_key = $("#pid" + id).attr("value");
         fetch("{{url_for('views.notes_api')}}", {
             method: "DELETE",
@@ -112,20 +112,19 @@
                 $(".modal").modal("hide");
                 alert("Note successfully deleted")
                 this.disabled = false;
-                $("#pid" + id).collapse("hide").removeAttr("id");
-                document.getElementById("ptime" + id).removeAttribute("id");
-                document.getElementById("pn" + id).removeAttribute("id");
-                document.getElementById("ptext" + id).removeAttribute("id");
-                document.getElementById("dp" + id).removeAttribute("id");
-                document.getElementById("ep" + id).removeAttribute("id");
-                for (var i = (parseInt(id) + 1); i < counter; i++) {
-                    var k = (i - 1);
-                    document.getElementById("pid" + i).id = "pid" + k;
-                    document.getElementById("ptime" + i).id = "ptime" + k;
-                    $("#pn" + i).text("#" + i).attr("id", "pn" + k);
-                    document.getElementById("ptext" + i).id = "ptext" + k;
-                    $("#dp" + i).attr("value", "pid" + k).attr("id", "dp" + k);
-                    $("#ep" + i).attr("value", "pid" + k).attr("id", "ep" + k);
+                var hide_item = document.getElementById("pid" + id);
+                new bootstrap.Collapse(hide_item, "hide");
+                hide_item.querySelectorAll('[id]').forEach(elem => elem.removeAttribute("id"));
+                hide_item.querySelectorAll("button").forEach(elem => elem.removeAttribute("onclick"));
+                hide_item.removeAttribute("id");
+                next = hide_item.nextElementSibling;
+                while(next !== null) {
+                    var i = parseInt(next.id.replace("pid",""))
+                    next.querySelector("#pn" + i).innerHTML = "#" + (i);
+                    next.querySelectorAll('[id]').forEach(elem => elem.id = elem.id.replace(i, (i-1)));
+                    next.querySelectorAll("button").forEach(b => b.value = b.value.replace(i, (i-1)));
+                    next.id = next.id.replace(i, (i-1));
+                    next = next.nextElementSibling;
                 }
                 counter--;
             }
@@ -206,7 +205,8 @@
         document.getElementById("post_text").id = "ptext" + counter;
         $("#delpost").attr("value", "pid" + counter).attr("id", "dp" + counter);
         $("#editpost").attr("value", "pid" + counter).attr("id", "ep" + counter);
-        $("#post_id").collapse("show").attr("value", data.time_key).attr("id", "pid" + counter);
+        new bootstrap.Collapse(document.getElementById("post_id"), "show");
+        $("#post_id").attr("value", data.time_key).attr("id", "pid" + counter);
         counter++;
     };
     const observer = new IntersectionObserver(entries => {

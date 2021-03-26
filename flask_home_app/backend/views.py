@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify
 from . import TmpData, local_addr, db
 import paho.mqtt.publish as publish
@@ -70,8 +70,8 @@ def notes_api():
             time_key = request.json.get("time_key")
             if time_key:
                 try:
-                    Notes.query.filter_by(time=datetime.fromisoformat(time_key)).delete()
-                    db.session.commit()
+                    #Notes.query.filter_by(time=datetime.fromisoformat(time_key)).delete()
+                    #db.session.commit()
                     return {}
                 except:
                     pass

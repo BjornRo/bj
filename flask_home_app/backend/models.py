@@ -43,8 +43,3 @@ class Airpressure(db.Model):
 class Notes(db.Model):
     time = db.Column(db.DateTime(timezone=True), primary_key=True)
     text = db.Column(db.String(1000), nullable=False)
-    updated = db.relationship("Notes_updated", backref="notes", cascade="all, delete", lazy="joined", order_by="Notes_updated.updatetime.desc()")
-
-class Notes_updated(db.Model):
-    notetime = db.Column(db.DateTime(timezone=True), db.ForeignKey('notes.time'), primary_key=True)
-    updatetime = db.Column(db.DateTime(timezone=True), primary_key=True)

@@ -33,7 +33,7 @@ def create_app():
     db.init_app(app)
     create_db(app)
     with app.app_context():
-        db.session.execute('pragma foreign_keys=on')
+        db.session.execute('PRAGMA foreign_keys=on')
 
     from .views import views
 
@@ -74,6 +74,6 @@ def create_db(app):
     #from os import path
 
     #if not path.exists("backend/" + DB_NAME):
-    from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp, Notes, Notes_updated
+    from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp, Notes
 
     db.create_all(app=app)
