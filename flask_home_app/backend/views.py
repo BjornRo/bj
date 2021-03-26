@@ -2,7 +2,7 @@ from datetime import date, datetime
 from flask import Blueprint, render_template, request, jsonify
 from . import TmpData, local_addr, db
 import paho.mqtt.publish as publish
-from .models import Notes, Timestamp
+from .models import Notes
 
 
 views = Blueprint("views", __name__)
@@ -28,54 +28,55 @@ def notes():
     return render_template("notes.html", local=local)
 
 
-def datetime_to_natural(dt):
-    months = {
-        1: "January",
-        2: "February",
-        3: "March",
-        4: "April",
-        5: "May",
-        6: "Juny",
-        7: "July",
-        8: "August",
-        9: "September",
-        10: "October",
-        11: "November",
-        12: "December",
-    }
-    return f"{dt.year} {months.get(dt.month)} {dt.strftime('%d %H:%M')}"
-
-
-@views.route("/api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-def api():
+@views.route("/notes/api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+def notes_api():
     if request.remote_addr.split(".")[:2] in local_addr:
         if request.method == "GET" and request.args.get("c") and request.args.get("c").isdigit():
             count = int(request.args.get("c"))
-            if count == db.session.query(Notes).count():
+            if count == Notes.query.count():
                 return {}
-            print(count)
             return jsonify(
                 [
-                    {"time": datetime_to_natural(note.time), "text": note.text}
-                    for note in db.session.query(Notes)
-                    .order_by(Notes.time.asc())
-                    .limit(10)
-                    .offset(count)
-                    .all()
+                    {
+                        "time": note.time.strftime("%Y %B %d %H:%M"),
+                        "time_key": note.time,
+                        "text": note.text,
+                    }
+                    for note in Notes.query.order_by(Notes.time.asc()).offset(count).limit(10).all()
                 ]
             )
-        if request.method == "POST":
+        elif request.method == "POST":
             if request.json.get("newpost"):
                 value = request.json.get("newpost")
                 if value and isinstance(value, str) and len(value) >= 1:
                     note = Notes(time=datetime.now(), text=value)
                     db.session.add(note)
                     db.session.commit()
-                    return {"time": datetime_to_natural(note.time), "text": note.text}
+                    return {
+                        "time": note.time.strftime("%Y %B %d %H:%M"),
+                        "time_key": note.time,
+                        "text": note.text,
+                    }
+        elif request.method == "PATCH":
+            time_key, text = request.json.get("time_key"), request.json.get("text")
+            if time_key and text and isinstance(text, str) and len(text) >= 1:
+                try:
+                    Notes.query.filter_by(time=datetime.fromisoformat(time_key)).first().text = text
+                    db.session.commit()
+                    return {}
+                except:
+                    pass
+        elif request.method == "DELETE":
+            time_key = request.json.get("time_key")
+            if time_key:
+                try:
+                    Notes.query.filter_by(time=datetime.fromisoformat(time_key)).delete()
+                    db.session.commit()
+                    return {}
+                except:
+                    pass
     return ("", 204)
 
-
-# [(i, [str(i)] * 10) for i in range(20)]
 
 # Everyone can get this data
 @views.route("/home_status")

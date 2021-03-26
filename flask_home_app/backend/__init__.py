@@ -32,6 +32,8 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_NAME}"
     db.init_app(app)
     create_db(app)
+    with app.app_context():
+        db.session.execute('pragma foreign_keys=on')
 
     from .views import views
 
@@ -59,7 +61,7 @@ class CustomJSONEncoder(JSONEncoder):
     def default(self, obj):
         try:
             if isinstance(obj, date):
-                return obj.isoformat("T", "minutes")
+                return obj.isoformat("T")
             iterable = iter(obj)
         except TypeError:
             pass
@@ -69,9 +71,9 @@ class CustomJSONEncoder(JSONEncoder):
 
 
 def create_db(app):
-    from os import path
+    #from os import path
 
-    if not path.exists("backend/" + DB_NAME):
-        from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp, Notes
+    #if not path.exists("backend/" + DB_NAME):
+    from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp, Notes, Notes_updated
 
-        db.create_all(app=app)
+    db.create_all(app=app)
