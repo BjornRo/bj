@@ -107,7 +107,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ time_key: post_time_key }),
         }).then(response => {
-            if (response.status !== 200) alert("Deleting note failed")
+            if (response.ok) alert("Deleting note failed")
             else {
                 $(".modal").modal("hide");
                 alert("Note successfully deleted")
@@ -154,7 +154,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ time_key: post_time_key, text: formdata }),
         }).then(response => {
-            if (response.status !== 200) alert("Updating note failed")
+            if (!response.ok) alert("Updating note failed")
             else {
                 $(".modal").modal("hide");
                 alert("Note successfully submitted")

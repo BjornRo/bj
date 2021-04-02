@@ -250,17 +250,19 @@ class MainController:
     def time_interval(self, t1, t2) -> Union[str, None]:
         if isinstance(t1, datetime) and isinstance(t2, datetime):
             return f"{datetime.strftime(t1, self.control.timeform)}-{datetime.strftime(t2, self.control.timeform)}"
-        return None
 
     def get_url(self, loc: str, time: datetime) -> Union[str, None]:
-        return self.control.data.get(loc).get(time).get('url')
+        try:
+            return self.control.data.get(loc).get(time).get('url')
+        except:
+            return None
 
     def get_bookable(self, loc: str, ts: datetime) -> Union[dict, None]:
-        if isinstance(loc, str) and isinstance(ts, datetime):
+        try:
             e = self.control.data.get(loc).get(ts)
-            if not e:
-                return e["url"] and e["slots"] != "0"
-        return None
+            return e["url"] and e["slots"] != "0"
+        except:
+            return None
 
     def get_printables_dict(self) -> dict:
         return {

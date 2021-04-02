@@ -19,3 +19,7 @@ Optimizations that may be too much but optimizing data structures and reducing d
 Forcing local usage for more "sensitive" data related stuff at the moment, but might deploy it online with full auth. Just need to solve https the painless way...
 
 There will not be consistency in the code due to learning. Mostly to see how different methods/functions to do the same task.
+
+
+Update April.
+Splitting up the parts into smaller and more focused modules. Too many dependencies that is not necessary.

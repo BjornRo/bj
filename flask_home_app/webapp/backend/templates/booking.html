@@ -83,10 +83,10 @@
 </style>{% endif %}{% endblock %}{% block title %}{{title}}{% endblock %}{% block content %}{% if not failed %}{% if
 local %}
 <div class="row g-0">
-    <div class="col-4 col1f"> {% for i,(loc_key,slot_list) in enumerate(data.items()) %}
+    <div class="col-4 col1f"> {% for i,loc_key in enumerate(keys) %}
         <div class="card m-2">
             <h4 class="card-header" id="loc{{i}}">{{loc_key}}</h5>
-            <ul class="list-group list-group-flush"> {% for j,time_key in enumerate(slot_list) %}
+            <ul class="list-group list-group-flush"> {% for j,time_key in enumerate(data[loc_key]) %}
                 <li class="list-group-item">
                     <p class="d-inline adjtxt h5" id="loc{{i}},{{j}}">
                         {{data[loc_key][time_key]['print']}}, slots: {{data[loc_key][time_key]['slots']}}
