@@ -22,17 +22,17 @@
         <div class="card m-2 bg-light shadow text-center">
             <h5 class="card-header">Air Pressure</h5>
             <div class="card-body">
-                <p id="press" class="d-inline">{{data[2][2]|round(1)}}</p>hPa
+                <p id="press" class="d-inline">{{data['kitchen/temphumidpress']['Airpressure']|round(1)}}</p>hPa
             </div>
         </div>
         <div class="card m-2 bg-light shadow text-center">
             <h5 class="card-header">Humidity</h5>
             <ul class="list-group list-group-flush">
                 <li class="list-group-item">Kitchen:
-                    <p id="khumid" class="d-inline">{{data[2][1]|round(1)}}</p>%
+                    <p id="khumid" class="d-inline">{{data['kitchen/temphumidpress']['Humidity']|round(1)}}</p>%
                 </li>
                 <li class="list-group-item">Balcony:
-                    <p id="bhumid" class="d-inline">{{data[1][1]|round(1)}}</p>%
+                    <p id="bhumid" class="d-inline">{{data['balcony/temphumid']['Humidity']|round(1)}}</p>%
                 </li>
             </ul>
         </div>
@@ -40,13 +40,13 @@
             <h5 class="card-header">Temperatures</h5>
             <ul class="list-group list-group-flush">
                 <li class="list-group-item">Kitchen:
-                    <p id="ktemp" class="d-inline">{{data[2][0]|round(1)}}</p>°C
+                    <p id="ktemp" class="d-inline">{{data['kitchen/temphumidpress']['Temperature']|round(1)}}</p>°C
                 </li>
                 <li class="list-group-item">Balcony:
-                    <p id="btemp" class="d-inline">{{data[1][0]|round(1)}}</p>°C
+                    <p id="btemp" class="d-inline">{{data['balcony/temphumid']['Temperature']|round(1)}}</p>°C
                 </li>
                 <li class="list-group-item">Outdoors:
-                    <p id="otemp" class="d-inline">{{data[3]|round(1)}}</p>°C
+                    <p id="otemp" class="d-inline">{{data['bikeroom/temp']['Temperature']|round(1)}}</p>°C
                 </li>
             </ul>
         </div>
@@ -73,10 +73,13 @@
             <button type="button" class="btn btn-warning cbutton" id="heater" value="on">Heater</button>
         </div><br style="clear: both;">
         <div class="btn-group mt-2" role="group" style="width: 24rem;">
-            <button type="button" class="btn btn-danger cbutton text-dark" id="full_light" value="off">Full light off</button>
-            <button type="button" class="btn btn-danger cbutton text-dark" id="low_light" value="off">Low light off</button>
+            <button type="button" class="btn btn-danger cbutton text-dark" id="full_light" value="off">Full light
+                off</button>
+            <button type="button" class="btn btn-danger cbutton text-dark" id="low_light" value="off">Low light
+                off</button>
             <button type="button" class="btn btn-danger cbutton text-dark" id="heater" value="off">Heater off</button>
-            <button type="button" class="btn btn-danger cbutton text-dark" id="alloff" value="off">Everything off</button>
+            <button type="button" class="btn btn-danger cbutton text-dark" id="alloff" value="off">Everything
+                off</button>
         </div>
         <div class="card mt-2 success" style="width: 12rem;">
             <div class="card-body h5">Command sent.</div>
@@ -98,7 +101,7 @@
                 $("div.success").fadeIn(300).delay(2500).fadeOut(500);
                 setTimeout(function () {
                     $.getJSON("{{ url_for('views.home_status') }}", function (data) {
-                        get_status(data);
+                        get_relay_status(data);
                     });
                 }, 500);
             }
@@ -108,23 +111,24 @@
     setInterval(function () {
         $.getJSON("{{ url_for('views.home_status') }}", function (data) {
             var decimals = 1;
-            document.getElementById("press").innerHTML =  round_decimals(data['kitchen/temphumidpress'][2], decimals);
-            document.getElementById("khumid").innerHTML = round_decimals(data['kitchen/temphumidpress'][1], decimals);
-            document.getElementById("ktemp").innerHTML = round_decimals(data['kitchen/temphumidpress'][0], decimals1);
-            document.getElementById("btemp").innerHTML = round_decimals(data['balcony/temphumid'][0], decimals);
-            document.getElementById("bhumid").innerHTML = round_decimals(data['balcony/temphumid'][1], decimals);
-            document.getElementById("otemp").innerHTML = round_decimals(data['bikeroom/temp'], decimals);
-            get_status(data);
+            var dat = data['weather_data']
+            document.getElementById("press").innerHTML = round_decimals(dat['kitchen/temphumidpress']['Airpressure'], decimals);
+            document.getElementById("khumid").innerHTML = round_decimals(dat['kitchen/temphumidpress']['Humidity'], decimals);
+            document.getElementById("ktemp").innerHTML = round_decimals(dat['kitchen/temphumidpress']['Temperature'], decimals);
+            document.getElementById("btemp").innerHTML = round_decimals(dat['balcony/temphumid']['Temperature'], decimals);
+            document.getElementById("bhumid").innerHTML = round_decimals(dat['balcony/temphumid']['Humidity'], decimals);
+            document.getElementById("otemp").innerHTML = round_decimals(dat['bikeroom/temp']['Temperature'], decimals);
+            get_relay_status(data);
         });
     }, 5000);
     function round_decimals(value, decimals) {
         return Math.round(value * 10 * decimals) / (10 * decimals);
     }
-    function get_status(data) {
+    function get_relay_status(data) {
         var i = 0;
         ["full_light_status", "low_light_status", "heater_status"].forEach(element => {
             var htmlelem = document.getElementById(element);
-            var boolval = data['balcony/relay/status'][i] <= 0;
+            var boolval = data['relay_status'][i] <= 0;
             if (boolval) htmlelem.className = "card-body bg-danger";
             else htmlelem.className = "card-body bg-success";
             htmlelem.innerHTML = boolval ? "Inactive" : "Active";
@@ -132,6 +136,6 @@
         });
     }
     document.addEventListener("DOMContentLoaded", function () {
-        get_status(JSON.parse('{"balcony/relay/status":{{rel_status | tojson}}}'));
+        get_relay_status(JSON.parse('{"relay_status":{{rel_status | tojson}}}'));
     });
 </script>{%endif%} {% endblock %}

@@ -1,31 +1,34 @@
 from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 import os
+import json
 from flask.json import JSONEncoder
 from datetime import date
+from pymemcache.client.base import PooledClient
 
-# # Pseudo memory-db. Use a static class.
-# # Data that is not critical to store in db.
-# # Locks are not necessary since race conditions are ok in this specific case.
-# class TmpData:
-#     subs = (
-#         "balcony/relay/status",
-#         "balcony/temphumid",
-#         "kitchen/temphumidpress",
-#         "bikeroom/temp",
-#     )
-#     # Init values doesn't matter.
-#     tmp = {k: v for k, v in zip(subs, ([-1, -1, -1, -1], [-99, -99], [-99, -99, -99], -99))}
-
+class JSerde(object):
+    def deserialize(self, key, value, flags):
+        if flags == 1:
+            return value.decode("utf-8")
+        if flags == 2:
+            return json.loads(value.decode("utf-8"))
+        raise Exception("Unknown serialization format")
 
 db = SQLAlchemy()
 DB_NAME = "database.db"
 local_addr = (["192", "168"], ["127", "0"])
+memcache = PooledClient("/var/run/memcached/memcached.sock", serde=JSerde())
 
+fake_data = {
+    "bikeroom/temp": {"Temperature": -99},
+    "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
+    "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
+}
+fake_status = (-1, -1, -1, -1)
 
 def create_app():
     app = Flask(__name__)
-    app.config["SECRET_KET"] = "secret"
+    app.config["SECRET_KET"] = "secret"  # No cookies or anything that tracks users...
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_NAME}"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.json_encoder = CustomJSONEncoder

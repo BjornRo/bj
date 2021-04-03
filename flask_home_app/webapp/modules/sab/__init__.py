@@ -19,7 +19,7 @@ from typing import Union
 import requests
 from bs4 import BeautifulSoup
 import re
-import os
+from pathlib import Path
 import json
 from datetime import datetime, timedelta
 
@@ -281,5 +281,5 @@ class MainController:
 
 
 def load_json() -> dict:
-    with open(os.path.dirname(os.path.realpath(__file__)) + "\\data.json", "r") as f:
+    with open(Path(__file__).parent.absolute() / "data.json", "r") as f:
         return json.load(f)

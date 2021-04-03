@@ -1,22 +1,23 @@
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify
-from . import TmpData, local_addr, db
+from . import local_addr, db, memcache, fake_data, fake_status
 import paho.mqtt.publish as publish
 from .models import Notes
 
 
 views = Blueprint("views", __name__)
 
-
 @views.route("/")
 def home():
     local = request.remote_addr.split(".")[:2] in local_addr
+    data = memcache.get("weather_data_home")
+    rel_status = memcache.get("relay_status")
     return render_template(
         "index.html",
         title="Home",
-        data=list(TmpData().tmp.values()),
+        data=data if data else fake_data,
         local=local,
-        rel_status=TmpData().tmp["balcony/relay/status"],
+        rel_status=rel_status if data else fake_status,
     )
 
 
@@ -82,7 +83,14 @@ def notes_api():
 # Everyone can get this data
 @views.route("/home_status")
 def home_status():
-    return jsonify(TmpData().tmp)
+    data = memcache.get("weather_data_home")
+    rel_status = memcache.get("relay_status")
+    return jsonify(
+        {
+            "weather_data": data if data else fake_data,
+            "relay_status": rel_status if data else fake_status,
+        }
+    )
 
 
 # Pinsetup for arduino. Send 0-3
