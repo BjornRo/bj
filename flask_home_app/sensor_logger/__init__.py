@@ -6,64 +6,61 @@ from threading import Thread
 import schedule
 import time
 from pathlib import Path
+from pymemcache.client.base import Client
+import json
 
-# Setup and run.
+# Setup and run. Scheduler queries database every full or half hour. Mqtt queries tempdata to memory.
 def main():
-    # Tempdata
     tmpdata = {
         "bikeroom/temp": {"Temperature": None},
         "balcony/temphumid": {"Temperature": None, "Humidity": None},
         "kitchen/temphumidpress": {"Temperature": None, "Humidity": None, "Airpressure": None},
     }
 
-    Thread(target=mqtt_agent, args=(tmpdata,), daemon=True).start()
+    db = sqlite3.connect(Path.cwd().parent / "webapp" / "backend" / "database.db")
 
-    schedule_setup(Path.cwd().parent / "webapp" / "backend" / "database.db", tmpdata)
+    Thread(target=mqtt_agent, args=(tmpdata, "balcony/relay/status"), daemon=True).start()
+
+    schedule_setup(db, tmpdata)
+
+    # Poll tmpdata until all Nones are gone.
+    while True:
+        time.sleep(1)
+        for value_list in tmpdata.values():
+            if None in value_list.values():
+                break
+        else:
+            break
 
     while True:
         schedule.run_pending()
-        time.sleep(5)
+        time.sleep(10)
 
 
-# "dumb" method, this just adds values if each set of values doesn't contain None.
 # mqtt function does all the heavy lifting sorting out bad data.
-def schedule_setup(db, tmpdata):
+def schedule_setup(db: sqlite3.Connection, tmpdata: dict):
     def querydb():
-        list_to_query = []
-        for location, value_list in tmpdata.items():
-            if None in value_list.values():
-                continue
-            list_to_query.append(location)
-
-        if not list_to_query:
-            return
-
         time_now = datetime.now().isoformat("T", "minutes")
-        con = sqlite3.connect(db)
-        cur = con.cursor()
-        cur.execute(f"INSERT INTO Timestamp VALUES ({time_now})")
-        for location in list_to_query:
+        cursor = db.cursor()
+        cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
+        for location in tmpdata.keys():
             measurer = location.split("/")[0]
             for table, value in tmpdata[location].items():
-                cur.execute(f"INSERT INTO {table} VALUES ({measurer}, {time_now}, {value})")
-        con.commit()
-        con.close()
+                cursor.execute(f"INSERT INTO {table} VALUES ('{measurer}', '{time_now}', {value})")
+        db.commit()
+        cursor.close()
 
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
 
 
-# This agent only needs threading. Multiprocessing is nicer but I don't expect too much concurrency
-# on this webapp. Small microseconds delay are no problem at home.
-def mqtt_agent(tmpdata):
+def mqtt_agent(tmpdata: dict, *args):
     def on_connect(client, *_):
-        for topic in tmpdata.keys():
+        for topic in list(tmpdata.keys()) + [args[0]]:
             client.subscribe("home/" + topic)
 
     def on_message(client, userdata, msg):
         topic = msg.topic.replace("home/", "")
-        if topic not in tmpdata.keys():
-            return
         # Test if data is a listlike or a value.
         try:
             listlike = literal_eval(msg.payload.decode("utf-8"))
@@ -72,6 +69,10 @@ def mqtt_agent(tmpdata):
             elif not (isinstance(listlike, tuple) or isinstance(listlike, list)):
                 listlike = (listlike,)
         except:
+            return
+        if args[0] in topic:
+            if not set(listlike).difference(set((0,1))) and len(listlike) == 4:
+                memcache.set('relay_status', listlike)
             return
         if len(listlike) != len(tmpdata[topic]):
             return
@@ -84,15 +85,22 @@ def mqtt_agent(tmpdata):
                 continue
             elif key == "Airpressure" and not 90000 <= value <= 115000:
                 continue
-            elif key not in ("Temperature", "Humidity", "Airpressure"):
-                continue
             tmpdata[topic][key] = value / 100
+        memcache.set('weather_data_home', tmpdata)
+
+    # setup memcache
+    class JSerde(object):
+        def serialize(self, key, value):
+            if isinstance(value, str):
+                return value, 1
+            return json.dumps(value), 2
+    memcache = Client('/var/run/memcached/memcached.sock', serde=JSerde())
 
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect("www.home", 1883, 60)
-    client.loop_forever(timeout=1)
+    client.loop_forever()
 
 
 if __name__ == "__main__":

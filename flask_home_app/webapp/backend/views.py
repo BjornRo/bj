@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, json, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
 from . import TmpData, local_addr, db
 import paho.mqtt.publish as publish
 from .models import Notes
