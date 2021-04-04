@@ -17,7 +17,7 @@ class JSerde(object):
 db = SQLAlchemy()
 DB_NAME = "database.db"
 local_addr = (["192", "168"], ["127", "0"])
-memcache = PooledClient("/var/run/memcached/memcached.sock", serde=JSerde())
+memcache = PooledClient("/memcached/memcached.sock", serde=JSerde())
 
 fake_data = {
     "bikeroom/temp": {"Temperature": -99},
@@ -29,11 +29,11 @@ fake_status = (-1, -1, -1, -1)
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KET"] = "secret"  # No cookies or anything that tracks users...
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_NAME}"
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:////db/{DB_NAME}"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.json_encoder = CustomJSONEncoder
     db.init_app(app)
-    create_db(app)
+    #create_db(app)
     with app.app_context():
         db.session.execute("PRAGMA foreign_keys=on")
 

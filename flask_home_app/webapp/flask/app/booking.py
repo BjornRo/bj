@@ -16,7 +16,7 @@ def inject_enumerate():
 
 @booking.route("")
 def home():
-    local = request.remote_addr.split(".")[:2] in local_addr
+    local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
     if local:
         if control.query_booking_sort():
             printables = control.get_printables_dict()
@@ -34,7 +34,7 @@ def home():
 
 @booking.route("/api", methods=["GET", "POST"])
 def api():
-    if request.remote_addr.split(".")[:2] in local_addr:
+    if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
         try:
             if request.method == "GET":
                 if control.query_booking_sort():

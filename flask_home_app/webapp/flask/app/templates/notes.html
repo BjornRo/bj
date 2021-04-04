@@ -84,7 +84,7 @@
 </div>
 
 {% else %}
-<div class="card text-white bg-danger mb-3" style="max-width: 18rem;">
+<div class="card text-white bg-danger m-2" style="max-width: 18rem;">
     <div class="card-header m-3">
         <h5 class="card-title">Only accessible from local network!</h5>
     </div>
@@ -107,7 +107,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ time_key: post_time_key }),
         }).then(response => {
-            if (response.ok) alert("Deleting note failed")
+            if (!response.ok) alert("Deleting note failed")
             else {
                 $(".modal").modal("hide");
                 alert("Note successfully deleted")

@@ -28,14 +28,14 @@ def api():
                 SELECT time, temperature AS brtemp
                 FROM Temperature
                 WHERE measurer = 'bikeroom')
-            SELECT kd.time, ktemp, khumid, kpressure, btemp, bhumid, brtemp
-                FROM kitchendata kd
-                LEFT OUTER JOIN
-                    balconydata bd
-                    ON kd.time = bd.time
-                LEFT OUTER JOIN
-                    bikeroomdata brd
-                    ON kd.time = brd.time"""
+        SELECT kd.time, ktemp, khumid, kpressure, btemp, bhumid, brtemp
+            FROM kitchendata kd
+            LEFT OUTER JOIN
+                balconydata bd
+                ON kd.time = bd.time
+            LEFT OUTER JOIN
+                bikeroomdata brd
+                ON kd.time = brd.time"""
     ).fetchall()
     db.session.commit()
     return jsonify(

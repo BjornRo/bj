@@ -9,7 +9,7 @@ views = Blueprint("views", __name__)
 
 @views.route("/")
 def home():
-    local = request.remote_addr.split(".")[:2] in local_addr
+    local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
     data = memcache.get("weather_data_home")
     rel_status = memcache.get("relay_status")
     return render_template(
@@ -23,13 +23,13 @@ def home():
 
 @views.route("/notes", methods=["GET", "POST"])
 def notes():
-    local = request.remote_addr.split(".")[:2] in local_addr
+    local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
     return render_template("notes.html", local=local)
 
 
 @views.route("/notes/api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 def notes_api():
-    if request.remote_addr.split(".")[:2] in local_addr:
+    if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
         try:
             if request.method == "GET":
                 count = int(request.args.get("c"))
@@ -101,7 +101,7 @@ commands = {"off": 0, "on": 1}
 
 @views.route("/post_command", methods=["POST"])
 def post_command():
-    if request.remote_addr.split(".")[:2] in local_addr:
+    if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
         try:
             ent, com = request.form.get("entity").lower(), request.form.get("command").lower()
             if ent in entities and com in commands:
