@@ -46,7 +46,7 @@ def schedule_setup(tmpdata: dict):
         db.commit()
         cursor.close()
 
-    db = sqlite3.connect("/var/www/database.db")
+    db = sqlite3.connect("/db/database.db")
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
 
@@ -92,7 +92,7 @@ def mqtt_agent(tmpdata: dict, status_path=["balcony/relay/status"]):
                 return value, 1
             return json.dumps(value), 2
 
-    memcache = Client("/var/run/memcached/memcached.sock", serde=JSerde())
+    memcache = Client("memcached:11211", serde=JSerde())
 
     client = mqtt.Client()
     client.on_connect = on_connect

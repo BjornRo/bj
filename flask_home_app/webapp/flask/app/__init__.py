@@ -17,7 +17,7 @@ class JSerde(object):
 db = SQLAlchemy()
 DB_NAME = "database.db"
 local_addr = (["192", "168"], ["127", "0"])
-memcache = PooledClient("/memcached/memcached.sock", serde=JSerde())
+memcache = PooledClient("memcached:11211", serde=JSerde())
 
 fake_data = {
     "bikeroom/temp": {"Temperature": -99},
