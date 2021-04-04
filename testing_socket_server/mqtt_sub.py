@@ -8,6 +8,7 @@ def on_connect(client, userdata, flags, rc):
     # reconnect then subscriptions will be renewed.
     client.subscribe("home/kitchen/temphumidpress")
     client.subscribe("home/bikeroom/temp")
+    client.subscribe("home/balcony/relaystatus")
     client.subscribe("home/balcony/relay")
 
 # The callback for when a PUBLISH message is received from the server.

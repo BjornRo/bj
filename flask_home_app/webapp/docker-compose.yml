@@ -1,6 +1,14 @@
-version: '3.8'
+version: '3.9'
 
 services:
+  sensor_logger:
+    container_name: sensor_logger
+    volumes:
+        - /var/www:/db
+        - /var/run/memcached:/memcached
+    restart: always
+    build: ./sensor_logger
+
   flask:
     container_name: flask
     restart: always
@@ -10,8 +18,7 @@ services:
     command: gunicorn app.__init__:create_app() -w 1 -b 0.0.0.0:8000
     volumes:
       - /var/www:/db
-      - /var/run/memcached:/memcached/
-
+      - /var/run/memcached:/memcached:ro
 
   nginx:
     container_name: nginx

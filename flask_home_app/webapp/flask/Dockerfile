@@ -1,4 +1,4 @@
-FROM python:3.9.3-buster
+FROM python:alpine
 
 ENV CONTAINER_HOME=/var/www
 
