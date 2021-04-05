@@ -5,21 +5,26 @@ import json
 from flask.json import JSONEncoder
 from datetime import date
 from pymemcache.client.base import PooledClient
-from modules.sab import MainController, load_json
+
 
 class JSerde(object):
+    def serialize(self, key, value):
+        if isinstance(value, str):
+            return value, 1
+        return json.dumps(value), 2
+
     def deserialize(self, key, value, flags):
         if flags == 1:
-            return value.decode("utf-8")
+            return value
         if flags == 2:
-            return json.loads(value.decode("utf-8"))
+            return json.loads(value)
         raise Exception("Unknown serialization format")
+
 
 db = SQLAlchemy()
 DB_NAME = "database.db"
 local_addr = (["192", "168"], ["127", "0"])
 memcache = PooledClient("memcached:11211", serde=JSerde())
-control = MainController(0, **load_json()["site"]["data"])
 
 fake_data = {
     "bikeroom/temp": {"Temperature": -99},
@@ -28,6 +33,7 @@ fake_data = {
 }
 fake_status = (-1, -1, -1, -1)
 
+
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KET"] = "secret"  # No cookies or anything that tracks users...
@@ -35,7 +41,7 @@ def create_app():
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.json_encoder = CustomJSONEncoder
     db.init_app(app)
-    #create_db(app)
+    # create_db(app)
     with app.app_context():
         db.session.execute("PRAGMA foreign_keys=on")
 

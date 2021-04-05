@@ -1,11 +1,13 @@
 from flask import Blueprint, render_template, request, jsonify
 from datetime import datetime
-from . import local_addr, control
+from . import local_addr, memcache
+from modules.sab import MainController, load_json
 
 # from flask_jwt_extended import create_access_token
 
-booking = Blueprint("booking", __name__)
 
+
+booking = Blueprint("booking", __name__)
 
 @booking.context_processor
 def inject_enumerate():
@@ -16,8 +18,10 @@ def inject_enumerate():
 def home():
     local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
     if local:
+        control = MainController(0, **load_json()["site"]["data"])
         if control.query_booking_sort():
             printables = control.get_printables_dict()
+            memcache.set()
             return render_template(
                 "booking.html",
                 title="Booking",
@@ -34,6 +38,7 @@ def home():
 def api():
     if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
         try:
+            control = MainController(0, **load_json()["site"]["data"])
             if request.method == "GET":
                 if control.query_booking_sort():
                     return jsonify(

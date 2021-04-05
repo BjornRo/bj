@@ -207,7 +207,7 @@ class Singleton(type):
 
 # Thought of a facade pattern to make it easier to handle.
 # Might need some refactoring... Whatever... Strong dependency to QPSF. MC is a weak entity though.
-class MainController(metaclass=Singleton):
+class MainController(): #metaclass=Singleton
     def __init__(
         self,
         first_wkday_num: int,

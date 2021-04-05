@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 from datetime import datetime, timedelta
 
-
+initialized = False
 # Timeout for requests, default 10.
 timeout = 10
 # Time related
@@ -20,13 +20,6 @@ first_wkday_num = first_wkday_num
 main_url = protocol + hostname
 query_url = main_url + path
 query = query
-
-# Data-related
-_buffer_full = False
-_rawdata_buffer = []
-# Usable data in dict form.
-data = {}
-
 
 def update_time() -> None:
     time_now = datetime.now()
