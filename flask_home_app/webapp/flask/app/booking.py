@@ -1,13 +1,11 @@
 from flask import Blueprint, render_template, request, jsonify
-from datetime import datetime
 from . import local_addr, memcache
-from modules.sab import MainController, load_json
+import modules.sab as sab
 
 # from flask_jwt_extended import create_access_token
 
-
-
 booking = Blueprint("booking", __name__)
+
 
 @booking.context_processor
 def inject_enumerate():
@@ -16,12 +14,11 @@ def inject_enumerate():
 
 @booking.route("")
 def home():
-    local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
+    local = request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr
     if local:
-        control = MainController(0, **load_json()["site"]["data"])
-        if control.query_booking_sort():
-            printables = control.get_printables_dict()
-            memcache.set()
+        if data := sab.get_data():
+            printables = sab.get_printables_dict(data)
+            memcache.set("booking_data", data, expire=600)
             return render_template(
                 "booking.html",
                 title="Booking",
@@ -36,25 +33,26 @@ def home():
 
 @booking.route("/api", methods=["GET", "POST"])
 def api():
-    if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
+    if request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr:
         try:
-            control = MainController(0, **load_json()["site"]["data"])
             if request.method == "GET":
-                if control.query_booking_sort():
+                if data := sab.get_data():
+                    memcache.set("booking_data", data, expire=600)
                     return jsonify(
-                        control.get_bookable(
-                            request.args.get("location"),
-                            datetime.fromisoformat(request.args.get("timeslot")),
+                        sab.get_bookable(
+                            data, request.args.get("location"), request.args.get("timeslot")
                         )
                     )
             else:
                 username, password = request.form.get("user"), request.form.get("pass")
-                url = control.get_url(
-                    request.form.get("loc_key"),
-                    datetime.fromisoformat(request.form.get("time_key")),
+                datajs = memcache.get("booking_data")
+                url = (
+                    datajs.get(request.form.get("loc_key"))
+                    .get(request.form.get("time_key"))
+                    .get("url")
                 )
                 if url and username and password:
-                    res = control.post_data(url, username, password)
+                    res = sab.post_data(url, username, password)
                     return jsonify({"res": res[0], "msg": res[1]})
         except:
             pass

@@ -4,20 +4,17 @@ from . import local_addr, db, memcache, fake_data, fake_status
 import paho.mqtt.publish as publish
 from .models import Notes
 
-
 views = Blueprint("views", __name__)
 
 @views.route("/")
 def home():
     local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
-    data = memcache.get("weather_data_home")
-    rel_status = memcache.get("relay_status")
     return render_template(
         "index.html",
         title="Home",
-        data=data if data else fake_data,
+        data=memcache.get("weather_data_home"),
         local=local,
-        rel_status=rel_status if data else fake_status,
+        rel_status=memcache.get("relay_status"),
     )
 
 

@@ -19,16 +19,17 @@ query_url = main_url + cfg["SITE_DATA"]["path"]
 query = cfg["SITE_DATA"]["query"]
 strip_url = cfg["SITE_DATA"]["strip_url"]
 suffix = cfg["SITE_DATA"]["suffix"]
+
 del cfg
 
 
 def get_data() -> Union[dict, None]:
     time_now = datetime.now()
-    year, week, wkday = time_now.isocalendar()
-    wkday -= 1
+    year, week, _ = time_now.isocalendar()
+    wkday = time_now.weekday()
     if listlike := _query(year, week, wkday, time_now):
         data = {}
-        for i in range(2):
+        for i in range(wkday, wkday + 2):
             # Add all slots for the day and next day to the dict
             for j in listlike[i].find_all("li")[1:]:
                 # Get booking url. IF time hasn't opened, then the url is none
@@ -47,25 +48,28 @@ def get_data() -> Union[dict, None]:
                 ):
                     continue
                 # Get "number" of slots, location and time
-                loc = re.sub(".*\(|\).*", "", j.find("div", class_="location").text, flags=re.S)
+                location = re.sub(
+                    ".*\(|\).*", "", j.find("div", class_="location").text, flags=re.S
+                )
                 slots = re.sub("[^>0-9]", "", j.find("div", class_="status").text)
-                t_strt_end = [
+                t_start_end_elem = [
                     dict(zip(("hour", "minute"), map(int, t)))
                     for t in re.findall("(\d+):(\d+)", j.find("div", class_="time").text)
                 ]
-                strt_time = datetime(*time_now.timetuple()[:3], **t_strt_end[0]) + timedelta(days=i)
+                start_time = datetime(*time_now.timetuple()[:3], **t_start_end_elem[0]) + timedelta(
+                    days=(i - wkday)
+                )
+                end_time = start_time.replace(**t_start_end_elem[1])
 
                 # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-                if slots == "0" and (strt_time - time_now) <= timedelta(hours=2):
+                if slots == "0" and (start_time - time_now) <= timedelta(hours=2):
                     continue
 
                 # If current location doesn't exist, and wkday, add an empty dict
-                if not data.get(loc):
-                    data[loc] = {}
+                if not data.get(location):
+                    data[location] = {}
 
-                end_time = strt_time.replace(**t_strt_end[1]).isoformat("T", "minutes")
-                strt_time = strt_time.isoformat("T", "minutes")
-                data[loc][strt_time] = {"end_time": end_time, "url": url, "slots": slots}
+                data[location][start_time] = {"end_time": end_time, "url": url, "slots": slots}
         return data
 
 
@@ -73,15 +77,15 @@ def get_data() -> Union[dict, None]:
 def _query(year: int, week: int, wkday: int, time_now: datetime) -> Union[list, None]:
     def qry(query_arg: str) -> Union[list, None]:
         try:
-            respdata = requests.get(query_url + query_arg, timeout)
-            respdata.close()
-            return BeautifulSoup(respdata.content, "html.parser").find_all("li", class_="day")
+            return BeautifulSoup(
+                requests.get(query_url + query_arg, timeout).content, "html.parser"
+            ).find_all("li", class_="day")
         except:
             pass
 
     queries = (
-        query.format(year, week),
-        query.format(*(time_now + timedelta(days=1)).isocalendar()[:2]),
+        qry.format(year, week),
+        qry.format(*(time_now + timedelta(days=1)).isocalendar()[:2]),
     )
     if (data := qry(queries[0])) and wkday == 6:
         data2 = qry(queries[1])
@@ -89,45 +93,12 @@ def _query(year: int, week: int, wkday: int, time_now: datetime) -> Union[list, 
     return data
 
 
-def get_printables_dict(data) -> dict:
-    return {
-        location: {
-            st_time: {
-                "print": (
-                    f"{datetime.fromisoformat(st_time).strftime('%A')[:3]}, "
-                    f"{st_time[-5:]}-{st_dict['end_time'][-5:]}"
-                ),
-                "slots": st_dict["slots"] if st_dict["url"] else "not unlocked",
-            }
-            for st_time, st_dict in time_dict.items()
-        }
-        for location, time_dict in data.items()
-    }
-
-
-def get_bookable(data, loc: str, ts: str) -> Union[bool, None]:
-    try:
-        e = data.get(loc).get(ts)
-        return e["url"] is not None and e["slots"] != "0"
-    except:
-        return None
-
-
-def get_url(data, loc: str, time: datetime) -> Union[str, None]:
-    try:
-        return data.get(loc).get(time).get("url")
-    except:
-        return None
-
-
 def post_data(booking_url: str, user: str, passw: str) -> tuple:
     if not (isinstance(booking_url, str) and isinstance(user, str) and isinstance(passw, str)):
         return (False, "Error: Invalid booking url, and/or invalid logindata")
     try:
         # Check if response is correct. Http evaluates: 200-400 is true, else is false.
-        response = requests.get(main_url + strip_url + booking_url + suffix, timeout)
-        response.close()
-        if not response:
+        if not (response := requests.get(main_url + strip_url + booking_url + suffix, timeout)):
             return
     except:
         return (False, "Failed to get booking link")
@@ -147,9 +118,7 @@ def post_data(booking_url: str, user: str, passw: str) -> tuple:
 
     # Send data
     try:
-        sent = requests.post(main_url + soup_response["action"], data=payload)
-        sent.close()
-        if sent:
+        if sent := requests.post(main_url + soup_response["action"], data=payload):
             error_msg = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
             # Check if the post returned error. If no error, then the statement evaluates as None.
             if not error_msg:

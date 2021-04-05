@@ -3,8 +3,9 @@ from flask_sqlalchemy import SQLAlchemy
 import os
 import json
 from flask.json import JSONEncoder
-from datetime import date
 from pymemcache.client.base import PooledClient
+from datetime import date
+
 
 
 class JSerde(object):
