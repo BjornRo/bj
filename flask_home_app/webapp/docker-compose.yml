@@ -3,12 +3,14 @@ version: '3.9'
 services:
   mqtt:
     container_name: mqtt
+    restart: always
     build: ./mqtt
     ports:
       - 1883:1883
 
   memcached:
     container_name: memcached
+    restart: always
     image: memcached:alpine
 
   sensor_logger:
@@ -30,7 +32,7 @@ services:
     build: ./flask
     expose:
       - 8000
-    command: gunicorn app.__init__:create_app() -w 1 -b 0.0.0.0:8000
+    command: gunicorn app.__init__:create_app() -w 4 -b 0.0.0.0:8000
     environment:
       - TZ=Europe/Stockholm
     volumes:

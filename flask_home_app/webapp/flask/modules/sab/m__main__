@@ -7,53 +7,43 @@ import json
 from datetime import datetime, timedelta
 
 
-class QueryPost:
-    def __init__(
-        self,
-        first_wkday_num: int,
-        protocol: str,
-        hostname: str,
-        path: str,
-        query: str,
-        timeform=None,
-        timeout=10,
-    ):
-        # Timeout for requests, default 10.
-        self.timeout = timeout
-        # Time related
-        self.time_now = datetime.now()
-        self.year, self.week, _ = self.time_now.isocalendar()
-        self.wkday = self.time_now.weekday() + first_wkday_num
-        # Timeform datetime: Example %H:%M | %H-%M
-        self.timeform = timeform
-        self.first_wkday_num = first_wkday_num
+# Timeout for requests, default 10.
+timeout = 10
+# Time related
+time_now = datetime.now()
+year, week, _ = time_now.isocalendar()
+wkday = time_now.weekday() + first_wkday_num
+timeform = timeform
+first_wkday_num = first_wkday_num
 
-        # URL
-        self.main_url = protocol + hostname
-        self.query_url = self.main_url + path
-        self.query = query
+# URL
+main_url = protocol + hostname
+query_url = main_url + path
+query = query
 
-        # Data-related
-        self._buffer_full = False
-        self._rawdata_buffer = []
-        # Usable data in dict form.
-        self.data = {}
+# Data-related
+_buffer_full = False
+_rawdata_buffer = []
+# Usable data in dict form.
+data = {}
 
-    def update_time(self) -> None:
-        self.time_now = datetime.now()
-        self.year, self.week, _ = self.time_now.isocalendar()
-        self.wkday = self.time_now.weekday() + self.first_wkday_num
 
-    def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> bool:
-        if not self._buffer_full:
-            try:
-                self._rawdata_buffer += BeautifulSoup(
-                    requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
-                ).find_all(find_tag, class_=tag_class)
-                self._buffer_full = True
-            except:
-                pass
-        return self._buffer_full
+def update_time() -> None:
+    time_now = datetime.now()
+    year, week, _ = time_now.isocalendar()
+    wkday = time_now.weekday() + first_wkday_num
+
+
+def query_site(self, query_arg: str, find_tag: str, tag_class: str) -> bool:
+    if not self._buffer_full:
+        try:
+            self._rawdata_buffer += BeautifulSoup(
+                requests.get(self.query_url + query_arg, self.timeout).content, "html.parser"
+            ).find_all(find_tag, class_=tag_class)
+            self._buffer_full = True
+        except:
+            pass
+    return self._buffer_full
 
     def sort_data() -> bool:
         raise NotImplementedError
@@ -197,17 +187,9 @@ class QueryPostSiteF(QueryPost):
         return (False, "Error: Failed to send data.")
 
 
-class Singleton(type):
-    _instances = {}
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
-
-
 # Thought of a facade pattern to make it easier to handle.
 # Might need some refactoring... Whatever... Strong dependency to QPSF. MC is a weak entity though.
-class MainController(metaclass=Singleton):
+class MainController:
     def __init__(
         self,
         first_wkday_num: int,
@@ -246,7 +228,7 @@ class MainController(metaclass=Singleton):
 
     def get_url(self, loc: str, time: datetime) -> Union[str, None]:
         try:
-            return self.control.data.get(loc).get(time).get('url')
+            return self.control.data.get(loc).get(time).get("url")
         except:
             return None
 
@@ -265,7 +247,7 @@ class MainController(metaclass=Singleton):
                         f"{self.days.get(st_time.weekday() + self.control.first_wkday_num)}, "
                         f"{self.time_interval(st_time, st_dict['end_time'])}"
                     ),
-                    "slots": st_dict['slots'] if st_dict['url'] else 'not unlocked',
+                    "slots": st_dict["slots"] if st_dict["url"] else "not unlocked",
                 }
                 for st_time, st_dict in time_dict.items()
             }

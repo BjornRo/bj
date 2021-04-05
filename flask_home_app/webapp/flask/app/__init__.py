@@ -5,6 +5,7 @@ import json
 from flask.json import JSONEncoder
 from datetime import date
 from pymemcache.client.base import PooledClient
+from modules.sab import MainController, load_json
 
 class JSerde(object):
     def deserialize(self, key, value, flags):
@@ -18,6 +19,7 @@ db = SQLAlchemy()
 DB_NAME = "database.db"
 local_addr = (["192", "168"], ["127", "0"])
 memcache = PooledClient("memcached:11211", serde=JSerde())
+control = MainController(0, **load_json()["site"]["data"])
 
 fake_data = {
     "bikeroom/temp": {"Temperature": -99},

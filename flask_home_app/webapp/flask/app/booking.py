@@ -1,11 +1,9 @@
 from flask import Blueprint, render_template, request, jsonify
 from datetime import datetime
-from modules.sab import MainController, load_json
-from . import local_addr
+from . import local_addr, control
 
 # from flask_jwt_extended import create_access_token
 
-control = MainController(0, **load_json()["site"]["data"])
 booking = Blueprint("booking", __name__)
 
 
