@@ -8,6 +8,7 @@ from configparser import ConfigParser
 
 cfg = ConfigParser()
 cfg.read(Path(__file__).parent.absolute() / "config.ini")
+# cfg.read("C:\\Users\\bjorn\\Documents\\git_repos\\doodle_repo\\flask_home_app\\webapp\\flask\\modules\\sab\\config.ini")
 
 # Timeout for requests, default 10.
 timeout = cfg["SETTINGS"].getint("timeout")
@@ -22,13 +23,13 @@ suffix = cfg["SITE_DATA"]["suffix"]
 del cfg
 
 
-def get_data() -> Union[dict, None]:
+def get_data(single=False) -> Union[dict, None]:
     time_now = datetime.now()
     year, week, wkday = time_now.isocalendar()
     wkday -= 1
-    if listlike := _query(year, week, wkday, time_now):
+    if listlike := _query(single, year, week, wkday, time_now):
         data = {}
-        for i in range(2):
+        for i in range(wkday, wkday + 2):
             # Add all slots for the day and next day to the dict
             for j in listlike[i].find_all("li")[1:]:
                 # Get booking url. IF time hasn't opened, then the url is none
@@ -70,31 +71,27 @@ def get_data() -> Union[dict, None]:
 
 
 # Query site
-def _query(year: int, week: int, wkday: int, time_now: datetime) -> Union[list, None]:
+def _query(single, year: int, week: int, wkday: int, time_now: datetime) -> Union[list, None]:
     def qry(query_arg: str) -> Union[list, None]:
         try:
-            respdata = requests.get(query_url + query_arg, timeout)
-            respdata.close()
-            return BeautifulSoup(respdata.content, "html.parser").find_all("li", class_="day")
+            resp = requests.get(query_url + query_arg, timeout=timeout)
+            return BeautifulSoup(resp.content, "html.parser").find_all("li", class_="day")
         except:
             pass
 
-    queries = (
-        query.format(year, week),
-        query.format(*(time_now + timedelta(days=1)).isocalendar()[:2]),
-    )
-    if (data := qry(queries[0])) and wkday == 6:
-        data2 = qry(queries[1])
+    if (data := qry(query.format(year, week))) and not single and wkday == 6:
+        data2 = qry(query.format(*(time_now + timedelta(days=1)).isocalendar()[:2]))
         return (data + data2) if data2 else None
     return data
 
 
 def get_printables_dict(data) -> dict:
+    d = {i: v for i, v in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])}
     return {
         location: {
             st_time: {
                 "print": (
-                    f"{datetime.fromisoformat(st_time).strftime('%A')[:3]}, "
+                    f"{d.get(datetime.fromisoformat(st_time).weekday())}, "
                     f"{st_time[-5:]}-{st_dict['end_time'][-5:]}"
                 ),
                 "slots": st_dict["slots"] if st_dict["url"] else "not unlocked",
@@ -105,7 +102,7 @@ def get_printables_dict(data) -> dict:
     }
 
 
-def get_bookable(data, loc: str, ts: str) -> Union[bool, None]:
+def is_bookable(data, loc: str, ts: str) -> Union[bool, None]:
     try:
         e = data.get(loc).get(ts)
         return e["url"] is not None and e["slots"] != "0"
@@ -125,15 +122,13 @@ def post_data(booking_url: str, user: str, passw: str) -> tuple:
         return (False, "Error: Invalid booking url, and/or invalid logindata")
     try:
         # Check if response is correct. Http evaluates: 200-400 is true, else is false.
-        response = requests.get(main_url + strip_url + booking_url + suffix, timeout)
-        response.close()
-        if not response:
+        if not (resp := requests.get(main_url + strip_url + booking_url + suffix, timeout=timeout)):
             return
     except:
         return (False, "Failed to get booking link")
 
     # Soupify it, to extract data to post from 'form', then find all inputs.
-    soup_response = BeautifulSoup(response.content, "html.parser").find("form")
+    soup_response = BeautifulSoup(resp.content, "html.parser").find("form")
 
     # Data to post
     payload = {}
@@ -147,9 +142,7 @@ def post_data(booking_url: str, user: str, passw: str) -> tuple:
 
     # Send data
     try:
-        sent = requests.post(main_url + soup_response["action"], data=payload)
-        sent.close()
-        if sent:
+        if sent := requests.post(main_url + soup_response["action"], data=payload):
             error_msg = BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
             # Check if the post returned error. If no error, then the statement evaluates as None.
             if not error_msg:

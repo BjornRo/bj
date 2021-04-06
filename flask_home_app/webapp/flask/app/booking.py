@@ -36,10 +36,10 @@ def api():
     if request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr:
         try:
             if request.method == "GET":
-                if data := sab.get_data():
+                if data := sab.get_data(True):
                     memcache.set("booking_data", data, expire=600)
                     return jsonify(
-                        sab.get_bookable(
+                        sab.is_bookable(
                             data, request.args.get("location"), request.args.get("timeslot")
                         )
                     )

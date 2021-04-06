@@ -7,7 +7,6 @@ from pymemcache.client.base import PooledClient
 from datetime import date
 
 
-
 class JSerde(object):
     def serialize(self, key, value):
         if isinstance(value, str):
