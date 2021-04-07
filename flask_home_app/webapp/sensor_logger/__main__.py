@@ -51,9 +51,9 @@ def schedule_setup(tmpdata: dict):
     schedule.every().hour.at(":00").do(querydb)
 
 
-def mqtt_agent(tmpdata: dict, status_path=["balcony/relay/status"]):
+def mqtt_agent(tmpdata: dict, status_path="balcony/relay/status"):
     def on_connect(client, *_):
-        for topic in list(tmpdata.keys()) + status_path:
+        for topic in list(tmpdata.keys()) + [status_path]:
             client.subscribe("home/" + topic)
 
     def on_message(client, userdata, msg):
@@ -67,7 +67,7 @@ def mqtt_agent(tmpdata: dict, status_path=["balcony/relay/status"]):
                 listlike = (listlike,)
         except:
             return
-        if status_path[0] in topic:
+        if status_path in topic:
             if not set(listlike).difference(set((0, 1))) and len(listlike) == 4:
                 memcache.set("relay_status", listlike)
             return
@@ -88,8 +88,6 @@ def mqtt_agent(tmpdata: dict, status_path=["balcony/relay/status"]):
     # setup memcache
     class JSerde(object):
         def serialize(self, key, value):
-            if isinstance(value, str):
-                return value, 1
             return json.dumps(value), 2
 
     memcache = Client("memcached:11211", serde=JSerde())
