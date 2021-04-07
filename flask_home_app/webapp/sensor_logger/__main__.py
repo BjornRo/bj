@@ -20,7 +20,7 @@ def main():
     schedule_setup(tmpdata)
 
     # Poll tmpdata until all Nones are gone.
-    while True:
+    while 1:
         time.sleep(1)
         for value_list in tmpdata.values():
             if None in value_list.values():
@@ -28,7 +28,7 @@ def main():
         else:
             break
 
-    while True:
+    while 1:
         schedule.run_pending()
         time.sleep(10)
 
