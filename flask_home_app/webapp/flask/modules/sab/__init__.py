@@ -8,7 +8,6 @@ from configparser import ConfigParser
 
 cfg = ConfigParser()
 cfg.read(Path(__file__).parent.absolute() / "config.ini")
-# cfg.read("C:\\Users\\bjorn\\Documents\\git_repos\\doodle_repo\\flask_home_app\\webapp\\flask\\modules\\sab\\config.ini")
 
 # Timeout for requests, default 10.
 timeout = cfg["SETTINGS"].getint("timeout")
@@ -22,7 +21,7 @@ strip_url = cfg["SITE_DATA"]["strip_url"]
 suffix = cfg["SITE_DATA"]["suffix"]
 
 # Misc
-days = {i: v for i, v in enumerate(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))}
+days = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 del cfg
 
 
@@ -60,7 +59,7 @@ def get_data(single=False) -> Union[dict, None]:
                 strt_time = datetime(*time_now.timetuple()[:3], **t_strt_end[0]) + timedelta(days=i)
 
                 # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
-                if slots == "0" and (strt_time - time_now) <= timedelta(hours=2):
+                if slots == "0" and strt_time - time_now <= timedelta(hours=2):
                     continue
 
                 # If current location doesn't exist, and wkday, add an empty dict
@@ -94,7 +93,7 @@ def get_printables_dict(data) -> dict:
         location: {
             st_time: {
                 "print": (
-                    f"{days.get(datetime.fromisoformat(st_time).weekday())}, "
+                    f"{days[datetime.fromisoformat(st_time).weekday()]}, "
                     f"{st_time[-5:]}-{st_dict['end_time'][-5:]}"
                 ),
                 "slots": st_dict["slots"] if st_dict["url"] else "not unlocked",
@@ -147,7 +146,9 @@ def post_data(booking_url: str, user: str, passw: str) -> tuple:
     try:
         if sent := requests.post(main_url + soup_response["action"], data=payload):
             # Check if the post returned error. If no error, then the statement evaluates as None.
-            if not (error_msg := BeautifulSoup(sent.content, "html.parser").find("p", class_="error")):
+            if not (
+                error_msg := BeautifulSoup(sent.content, "html.parser").find("p", class_="error")
+            ):
                 return (True, "Successfully booked {} at {}")
             else:
                 error_code = re.sub(" ", "", error_msg.text.strip()).lower()
