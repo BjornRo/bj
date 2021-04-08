@@ -1,14 +1,15 @@
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify
-from . import local_addr, db, memcache, fake_data, fake_status
+from . import local_addr, db, memcache
 import paho.mqtt.publish as publish
 from .models import Notes
 
 views = Blueprint("views", __name__)
 
+
 @views.route("/")
 def home():
-    local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
+    local = request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr
     return render_template(
         "index.html",
         title="Home",
@@ -20,13 +21,13 @@ def home():
 
 @views.route("/notes", methods=["GET", "POST"])
 def notes():
-    local = request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr
+    local = request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr
     return render_template("notes.html", local=local)
 
 
 @views.route("/notes/api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 def notes_api():
-    if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
+    if request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr:
         try:
             if request.method == "GET":
                 count = int(request.args.get("c"))
@@ -80,12 +81,10 @@ def notes_api():
 # Everyone can get this data
 @views.route("/home_status")
 def home_status():
-    data = memcache.get("weather_data_home")
-    rel_status = memcache.get("relay_status")
     return jsonify(
         {
-            "weather_data": data if data else fake_data,
-            "relay_status": rel_status if data else fake_status,
+            "weather_data": memcache.get("weather_data_home"),
+            "relay_status": memcache.get("relay_status"),
         }
     )
 
@@ -98,7 +97,7 @@ commands = {"off": 0, "on": 1}
 
 @views.route("/post_command", methods=["POST"])
 def post_command():
-    if request.headers.get("X-Forwarded-For").split(',')[0].split(".")[:2] in local_addr:
+    if request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr:
         try:
             ent, com = request.form.get("entity").lower(), request.form.get("command").lower()
             if ent in entities and com in commands:

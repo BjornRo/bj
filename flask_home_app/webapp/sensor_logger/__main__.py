@@ -1,29 +1,34 @@
 from ast import literal_eval
+from flask.app.models import Temp_hydro
 import paho.mqtt.client as mqtt
 from datetime import datetime
 import sqlite3
 from threading import Thread
 import schedule
 import time
-from pymemcache.client.base import Client
+from pymemcache.client.base import PooledClient
 import json
 
 # Setup and run. Scheduler queries database every full or half hour. Mqtt queries tempdata to memory.
 def main():
     tmpdata = {
-        "bikeroom/temp": {"Temperature": None},
-        "balcony/temphumid": {"Temperature": None, "Humidity": None},
-        "kitchen/temphumidpress": {"Temperature": None, "Humidity": None, "Airpressure": None},
+        "bikeroom/temp": {"Temperature": -99},
+        "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
+        "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
     }
+    remotedata = {"remote_sh": None}
 
-    Thread(target=mqtt_agent, args=(tmpdata,), daemon=True).start()
-    schedule_setup(tmpdata)
+    memcache = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=2)
+
+    Thread(target=mqtt_agent, args=(tmpdata, memcache), daemon=True).start()
+    Thread(target=remote_fetcher, args=(remotedata, memcache), daemon=True).start()
+    schedule_setup(tmpdata, remotedata)
 
     # Poll tmpdata until all Nones are gone.
     while 1:
         time.sleep(1)
         for value_list in tmpdata.values():
-            if None in value_list.values():
+            if -99 in value_list.values():
                 break
         else:
             break
@@ -33,16 +38,69 @@ def main():
         time.sleep(10)
 
 
+def remote_fetcher(remotedata, memcache):
+    from bmemcached import Client
+    import configparser
+    import pathlib
+
+    # Setup, load and delete. Dunno if this works...
+    # This could be a great use of asyncio... Maybe when I understand it for a later project.
+    cfg = configparser.ConfigParser()
+    cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
+    memcachier = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
+    del cfg
+    del pathlib
+    del configparser
+
+    last_time = None
+    count_error = 0
+    while 1:
+        time.sleep(10)
+        try:
+            if value := memcachier.get("remote_sh"):
+                jsondata = json.loads(value)
+                if not (this_time := jsondata.pop("Time")) == last_time:
+                    last_time = this_time
+                    count_error = 0
+
+                    newdata = {}
+                    for i in ("Temperature", "Temp_hydro", "Airpressure", "Humidity"):
+                        if i not in jsondata:
+                            break
+                        value = jsondata.pop(i)
+                        if not _test_value(i, value):
+                            break
+                        newdata[i] = value / 100
+                    else:
+                        remotedata["remote_sh"] = newdata
+                        memcache.set("remote_sh", newdata | {"Time": this_time})
+                        continue
+        except:
+            pass
+        # If nothing continues in try statement, then there is an error.
+        count_error += 1
+        if count_error >= 20:
+            # Set to invalid values after n attempts. Reset counter.
+            count_error = 0
+            remotedata["remote_sh"] = None
+
+
 # mqtt function does all the heavy lifting sorting out bad data.
-def schedule_setup(tmpdata: dict):
+def schedule_setup(tmpdata: dict, remotedata: dict):
+    def insert_db(cursor, datadict, time_now):
+        for location, data in datadict.items():
+            measurer = location.split("/")[0]
+            if not data:
+                continue
+            for table, value in data.items():
+                cursor.execute(f"INSERT INTO {table} VALUES ('{measurer}', '{time_now}', {value})")
+
     def querydb():
         time_now = datetime.now().isoformat("T", "minutes")
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
-        for location in tmpdata.keys():
-            measurer = location.split("/")[0]
-            for table, value in tmpdata[location].items():
-                cursor.execute(f"INSERT INTO {table} VALUES ('{measurer}', '{time_now}', {value})")
+        insert_db(cursor, tmpdata, time_now)
+        insert_db(cursor, remotedata, time_now)
         db.commit()
         cursor.close()
 
@@ -51,14 +109,14 @@ def schedule_setup(tmpdata: dict):
     schedule.every().hour.at(":00").do(querydb)
 
 
-def mqtt_agent(tmpdata: dict, status_path="balcony/relay/status"):
+def mqtt_agent(tmpdata: dict, memcache, status_path="balcony/relay/status"):
     def on_connect(client, *_):
         for topic in list(tmpdata.keys()) + [status_path]:
             client.subscribe("home/" + topic)
 
     def on_message(client, userdata, msg):
         topic = msg.topic.replace("home/", "")
-        # Test if data is a listlike or a value.
+        # Might redo the function to be more readable. Might taken optimization too far... :)
         try:
             listlike = literal_eval(msg.payload.decode("utf-8"))
             if isinstance(listlike, dict):
@@ -74,29 +132,31 @@ def mqtt_agent(tmpdata: dict, status_path="balcony/relay/status"):
         if len(listlike) != len(tmpdata[topic]):
             return
         for key, value in zip(tmpdata[topic].keys(), listlike):
-            if not isinstance(value, int):
-                continue
-            if key == "Temperature" and not -2500 <= value <= 5000:
-                continue
-            elif key == "Humidity" and not 0 <= value <= 10000:
-                continue
-            elif key == "Airpressure" and not 90000 <= value <= 115000:
+            if not _test_value(key, value):
                 continue
             tmpdata[topic][key] = value / 100
         memcache.set("weather_data_home", tmpdata)
-
-    # setup memcache
-    class JSerde(object):
-        def serialize(self, key, value):
-            return json.dumps(value), 2
-
-    memcache = Client("memcached:11211", serde=JSerde())
 
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect("www.home", 1883, 60)
     client.loop_forever()
+
+def _test_value(key, value) -> bool:
+    if isinstance(value, int):
+        if key in ("Temperature", "Temp_hydro"):
+            return -5000 <= value <= 5000
+        elif key == "Humidity":
+            return 0 <= value <= 10000
+        elif key == "Airpressure":
+            return 90000 <= value <= 115000
+    return False
+
+# setup memcache
+class JSerde(object):
+    def serialize(self, key, value):
+        return json.dumps(value), 2
 
 
 if __name__ == "__main__":

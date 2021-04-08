@@ -28,6 +28,11 @@ class Temperature(db.Model):
     time = db.Column(db.String(16), db.ForeignKey('timestamp.time'), primary_key=True)
     temperature = db.Column(db.Numeric(2), nullable=False)
 
+class Temp_hydro(db.Model):
+    measurer = db.Column(db.String(8), db.ForeignKey('measurer.key'), primary_key=True)
+    time = db.Column(db.String(16), db.ForeignKey('timestamp.time'), primary_key=True)
+    temperature = db.Column(db.Numeric(2), nullable=False)
+
 class Humidity(db.Model):
     measurer = db.Column(db.String(8), db.ForeignKey('measurer.key'), primary_key=True)
     time = db.Column(db.String(16), db.ForeignKey('timestamp.time'), primary_key=True)

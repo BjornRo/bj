@@ -1,13 +1,14 @@
+import configparser
 from typing import Union
 import requests
 from bs4 import BeautifulSoup
 import re
-from pathlib import Path
 from datetime import datetime, timedelta
-from configparser import ConfigParser
+import configparser
+import pathlib
 
-cfg = ConfigParser()
-cfg.read(Path(__file__).parent.absolute() / "config.ini")
+cfg = configparser.ConfigParser()
+cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
 
 # Timeout for requests, default 10.
 timeout = cfg["SETTINGS"].getint("timeout")
@@ -23,7 +24,8 @@ suffix = cfg["SITE_DATA"]["suffix"]
 # Misc
 days = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 del cfg
-
+del configparser
+del pathlib
 
 def get_data(single=False) -> Union[dict, None]:
     time_now = datetime.now()
@@ -56,7 +58,9 @@ def get_data(single=False) -> Union[dict, None]:
                     dict(zip(("hour", "minute"), map(int, t)))
                     for t in re.findall("(\d+):(\d+)", j.find("div", class_="time").text)
                 ]
-                strt_time = datetime(*time_now.timetuple()[:3], **t_strt_end[0]) + timedelta(days=i)
+                strt_time = datetime(*time_now.timetuple()[:3], **t_strt_end[0])
+                if i - wkday:
+                    strt_time += timedelta(days=1)
 
                 # Check if all slots are taken and there is 2hours or less, then continue. You can't unbook less than 2hours.
                 if slots == "0" and strt_time - time_now <= timedelta(hours=2):

@@ -26,12 +26,12 @@ DB_NAME = "database.db"
 local_addr = (["192", "168"], ["127", "0"])
 memcache = PooledClient("memcached:11211", serde=JSerde())
 
-fake_data = {
-    "bikeroom/temp": {"Temperature": -99},
-    "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
-    "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
-}
-fake_status = (-1, -1, -1, -1)
+# fake_data = {
+#     "bikeroom/temp": {"Temperature": -99},
+#     "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
+#     "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
+# }
+# fake_status = (-1, -1, -1, -1)
 
 
 def create_app():
