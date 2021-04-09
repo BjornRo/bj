@@ -1,5 +1,4 @@
 from ast import literal_eval
-from flask.app.models import Temp_hydro
 import paho.mqtt.client as mqtt
 from datetime import datetime
 import sqlite3
@@ -43,21 +42,21 @@ def remote_fetcher(remotedata, memcache):
     import configparser
     import pathlib
 
-    # Setup, load and delete. Dunno if this works...
     # This could be a great use of asyncio... Maybe when I understand it for a later project.
     cfg = configparser.ConfigParser()
     cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
-    memcachier = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
-    del cfg
-    del pathlib
-    del configparser
+    memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
+    memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 
     last_time = None
     count_error = 0
     while 1:
         time.sleep(10)
         try:
-            if value := memcachier.get("remote_sh"):
+            value = memcachier1.get("remote_sh")
+            if not value:
+                value = memcachier2.get("remote_sh")
+            if value:
                 jsondata = json.loads(value)
                 if not (this_time := jsondata.pop("Time")) == last_time:
                     last_time = this_time
@@ -89,9 +88,9 @@ def remote_fetcher(remotedata, memcache):
 def schedule_setup(tmpdata: dict, remotedata: dict):
     def insert_db(cursor, datadict, time_now):
         for location, data in datadict.items():
-            measurer = location.split("/")[0]
             if not data:
                 continue
+            measurer = location.split("/")[0]
             for table, value in data.items():
                 cursor.execute(f"INSERT INTO {table} VALUES ('{measurer}', '{time_now}', {value})")
 
@@ -116,6 +115,8 @@ def mqtt_agent(tmpdata: dict, memcache, status_path="balcony/relay/status"):
 
     def on_message(client, userdata, msg):
         topic = msg.topic.replace("home/", "")
+        if topic not in tmpdata:
+            return
         # Might redo the function to be more readable. Might taken optimization too far... :)
         try:
             listlike = literal_eval(msg.payload.decode("utf-8"))

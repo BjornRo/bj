@@ -1,0 +1,19 @@
+version: '3.9'
+
+services:
+  mqtt:
+    container_name: mqtt
+    restart: always
+    build: ./mqtt
+    ports:
+      - 1883:1883
+
+  sensor_logger:
+    container_name: sensor_logger
+    restart: always
+    build: ./sensor_logger
+    privileged: true
+    volumes:
+      - /sys/bus/w1/devices/:/devices
+    depends_on:
+      - mqtt
