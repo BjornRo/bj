@@ -22,10 +22,11 @@ class JSerde(object):
 
 
 db = SQLAlchemy()
-DB_NAME = "database.db"
+DB_NAME = "main_db.db"
 local_addr = (["192", "168"], ["127", "0"])
 memcache = PooledClient("memcached:11211", serde=JSerde())
 
+# Set data for memcache to prevent Nones.
 # fake_data = {
 #     "bikeroom/temp": {"Temperature": -99},
 #     "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
@@ -67,11 +68,11 @@ def create_app():
     return app
 
 
-def create_db(app):
-    if not os.path.isfile(DB_NAME):
-        from .models import Measurer, Temperature, Humidity, Airpressure, Timestamp, Notes
+# def create_db(app):
+#     if not os.path.isfile(DB_NAME):
+#         from .models import Notes
 
-        db.create_all(app=app)
+#         db.create_all(app=app)
 
 
 class CustomJSONEncoder(JSONEncoder):

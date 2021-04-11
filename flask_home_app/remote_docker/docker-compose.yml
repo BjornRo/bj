@@ -12,8 +12,9 @@ services:
     container_name: sensor_logger
     restart: always
     build: ./sensor_logger
-    privileged: true
     volumes:
-      - /sys/bus/w1/devices/:/devices
+      - /sys:/sys
+      - /home/pi/appdata:/db
     depends_on:
       - mqtt
+    privileged: true

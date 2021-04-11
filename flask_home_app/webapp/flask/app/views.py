@@ -6,7 +6,6 @@ from .models import Notes
 
 views = Blueprint("views", __name__)
 
-
 @views.route("/")
 def home():
     local = request.headers.get("X-Forwarded-For").split(",")[0].split(".")[:2] in local_addr

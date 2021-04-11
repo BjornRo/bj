@@ -23,3 +23,5 @@ There will not be consistency in the code due to learning. Mostly to see how dif
 
 Update April.
 Splitting up the parts into smaller and more focused modules. Too many dependencies that is not necessary.
+
+Setting up small nodes to be able to fetch data from a remote location.

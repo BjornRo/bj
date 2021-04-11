@@ -10,8 +10,12 @@ services:
 
   memcached:
     container_name: memcached
-    restart: always
     image: memcached:alpine
+    restart: always
+    ports:
+      - 11211:11211
+    command: ["memcached"]
+
 
   sensor_logger:
     container_name: sensor_logger
