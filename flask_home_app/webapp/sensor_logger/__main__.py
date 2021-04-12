@@ -94,7 +94,7 @@ def remote_fetcher(remotedata, rem_new_values, memcache, rem_key):
     last_update_remote = {key: datetime.now() for key in remotedata}
     last_update_memcachier = datetime.now()  # Just as init
     while 1:
-        time.sleep(10)
+        time.sleep(15)
         try:
             # Get the latest value from two sources.. woohoo
             # Test every possiblity...
@@ -140,7 +140,7 @@ def remote_fetcher(remotedata, rem_new_values, memcache, rem_key):
                             else:
                                 break
                         else:
-                            memcache.set(f"weater_data_{rem_key}", remotedata)
+                            memcache.set(f"weather_data_{rem_key}", remotedata)
                             last_update_remote[measr] = updatetime
                             with lock:
                                 remotedata[measr].update(tmpdict)
@@ -158,7 +158,7 @@ def remote_fetcher(remotedata, rem_new_values, memcache, rem_key):
 
 
 # mqtt function does all the heavy lifting sorting out bad data.
-def schedule_setup(tmpdata: dict, new_values: dict):
+def schedule_setup(tmp_data: dict, new_values: dict):
     def querydb():
         # Check if there exist any values that should be queried. To reduce as much time with lock.
         queryloc = []
@@ -168,20 +168,25 @@ def schedule_setup(tmpdata: dict, new_values: dict):
 
         if not queryloc:
             return
+
+        # Copy tmpdata, slight mistiming doesn't matter but if one thread changes to -99 while reading...
+        # Set values to false to reduce time with lock. In case I/O gets slowed down...
+        with lock:
+            tmpdata = tmp_data.copy()
+            new_val = new_values.copy()
+            for loc in queryloc:
+                for k in new_values[loc]:
+                    new_values[loc][k] = False
         time_now = datetime.now().isoformat("T", "minutes")
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
-        with lock:
-            for location in queryloc:
-                for measurer, valuedict in tmpdata[location].items():
-                    if not new_values[location][measurer]:
-                        continue
-                    meas_key = measurer.split("/")[0]
-                    for table, value in valuedict.items():
-                        cursor.execute(
-                            f"INSERT INTO {table} VALUES ('{meas_key}', '{time_now}', {value})"
-                        )
-                        new_values[location][measurer] = False
+        for location in queryloc:
+            for measurer, valuedict in tmpdata[location].items():
+                if not new_val[location][measurer]:
+                    continue
+                mkey = measurer.split("/")[0]
+                for table, val in valuedict.items():
+                    cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {val})")
         db.commit()
         cursor.close()
 
@@ -189,10 +194,7 @@ def schedule_setup(tmpdata: dict, new_values: dict):
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
 
-
-def mqtt_agent(
-    h_tmpdata: dict, h_new_values: dict, memcache, status_path="balcony/relay/status"
-):
+def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, status_path="balcony/relay/status"):
     def on_connect(client, *_):
         for topic in list(h_tmpdata.keys()) + [status_path]:
             client.subscribe("home/" + topic)
@@ -246,7 +248,7 @@ def mqtt_agent(
 
 def _test_value(key, value) -> bool:
     if isinstance(value, int):
-        if key in ("Temperature", "Temp_hydro"):
+        if key == "Temperature":
             return -5000 <= value <= 6000
         elif key == "Humidity":
             return 0 <= value <= 10000
