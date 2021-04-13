@@ -15,7 +15,7 @@ lock = Lock()
 #  devicename/measurements: for each measurement type: value.
 # New value is a flag to know if value has been updated since last SQL-query. -> Each :00, :30
 def main():
-    tmpdata = {
+    main_node_data = {
         "home": {
             "bikeroom/temp": {"Temperature": -99},
             "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
@@ -36,40 +36,43 @@ def main():
     }
     # Associated dict to see if the values has been updated. This is to let remote nodes
     # just send data and then you can decide at the main node.
-    new_values = {location: {key: False for key in subloc} for location, subloc in tmpdata.items()}
+    main_node_new_values = {
+        sub_node: {device: False for device in sub_node_data}
+        for sub_node, sub_node_data in main_node_data.items()
+    }
 
-    memcache = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=3)
+    memcache_local = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=3)
 
     # Set initial values.
-    memcache.set("weather_data_home", tmpdata["home"])
-    memcache.set("weather_data_remote_sh", tmpdata["remote_sh"])
+    memcache_local.set("weather_data_home", main_node_data["home"])
+    memcache_local.set("weather_data_remote_sh", main_node_data["remote_sh"])
 
     Thread(
         target=mqtt_agent,
         args=(
-            tmpdata["home"],
-            new_values["home"],
-            memcache,
+            main_node_data["home"],
+            main_node_new_values["home"],
+            memcache_local,
         ),
         daemon=True,
     ).start()
     Thread(
         target=remote_fetcher,
         args=(
-            tmpdata["remote_sh"],
-            new_values["remote_sh"],
-            memcache,
+            main_node_data["remote_sh"],
+            main_node_new_values["remote_sh"],
+            memcache_local,
             "remote_sh",
         ),
         daemon=True,
     ).start()
-    schedule_setup(tmpdata, new_values)
+    schedule_setup(main_node_data, main_node_new_values)
 
     # Poll tmpdata until all Nones are gone.
     while 1:
         time.sleep(1)
-        for value_list in tmpdata["home"].values():
-            if -99 in value_list.values():
+        for sub_node_values in main_node_data["home"].values():
+            if -99 in sub_node_values.values():
                 break
         else:
             break
@@ -79,10 +82,36 @@ def main():
         time.sleep(10)
 
 
-def remote_fetcher(remotedata, rem_new_values, memcache, rem_key):
+def remote_fetcher(sub_node_data, sub_node_new_values, memcache, rem_key):
     from bmemcached import Client
     import configparser
     import pathlib
+
+    def test_values_and_compare(value1, value2):
+        # Get the latest value from two sources.. woohoo
+        # Test every possiblity...Try catch to reduce if statements.
+        try:
+            if value1 is None:
+                value = json.loads(value2)
+            else:
+                if value2 is None:
+                    value = json.loads(value1)
+                else:
+                    value1 = json.loads(value1)
+                    value2 = json.loads(value2)
+                    try:
+                        t1 = datetime.fromisoformat(value1.pop(-1))
+                        try:
+                            t2 = datetime.fromisoformat(value2.pop(-1))
+                            return (*value1, t1) if t1 >= t2 else (*value2, t2)
+                        except:
+                            return (*value1, t1)
+                    except:
+                        value = value2
+                return (*value[:2], datetime.fromisoformat(value[2]))
+        except:
+            pass
+        return None
 
     # This could be a great use of asyncio... Maybe when I understand it for a later project.
     cfg = configparser.ConfigParser()
@@ -91,107 +120,87 @@ def remote_fetcher(remotedata, rem_new_values, memcache, rem_key):
     memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 
     count_error = 0
-    last_update_remote = {key: datetime.now() for key in remotedata}
+    last_update_remote = {key: datetime.now() for key in sub_node_data}
     last_update_memcachier = datetime.now()  # Just as init
     while 1:
         time.sleep(15)
-        try:
-            # Get the latest value from two sources.. woohoo
-            # Test every possiblity...
-            value1 = memcachier1.get(rem_key)
-            value2 = memcachier2.get(rem_key)
-            if value1 is None:
-                if value2 is None:
-                    count_error = 1 if count_error >= 20 else count_error + 1
-                    continue
-                else:
-                    value = json.loads(value2)
-            else:
-                if value2 is None:
-                    value = json.loads(value1)
-                else:
-                    value1 = json.loads(value1)
-                    value2 = json.loads(value2)
-                    try:
-                        t1 = datetime.fromisoformat(value1[2])
-                        try:
-                            t2 = datetime.fromisoformat(value[2])
-                            value = value1 if t1 >= t2 else value2
-                        except:
-                            value = value1
-                    except:
-                        value = value2
-
-            # At this point value or exception thrown.
-            memcache.set("remote_sh_rawdata", value)
-            this_time = datetime.fromisoformat(value.pop(-1))
-            if this_time >= last_update_memcachier:
-                last_update_memcachier = this_time
-                count_error = 0
-
-                new_tmpdata, data_updatetime = value
-                for measr, valuedict in new_tmpdata.items():
-                    tmpdict = {}
-                    # Test if new updatetime is newer than last. Otherwise continue.
-                    updatetime = datetime.fromisoformat(data_updatetime[measr])
-                    if updatetime >= last_update_remote[measr]:
-                        for key, val in valuedict.items():
-                            if key in remotedata[measr] and _test_value(key, int(val * 100)):
-                                tmpdict[key] = val
-                            else:
-                                break
-                        else:
-                            memcache.set(f"weather_data_{rem_key}", remotedata)
-                            last_update_remote[measr] = updatetime
-                            with lock:
-                                remotedata[measr].update(tmpdict)
-                                rem_new_values[measr] = True
-        except:
+        value = test_values_and_compare(memcachier1.get(rem_key), memcachier2.get(rem_key))
+        if value is None:
             count_error += 1
             if count_error >= 20:
                 # Set to invalid values after n attempts. Reset counter.
-                count_error = 1
+                count_error = 0
                 with lock:
-                    for measurer, valuedict in remotedata.items():
-                        for key, _ in valuedict.items():
-                            remotedata[measurer][key] = -99
-                            rem_new_values[measurer] = False
+                    for device, device_data in sub_node_data.items():
+                        for key in device_data:
+                            sub_node_data[device][key] = -99
+                            sub_node_new_values[device] = False
+            continue
+
+        # At this point valid value or exception thrown.
+        memcache.set("remote_sh_rawdata", (*value[:2], value[2].isoformat()))
+        if value[2] >= last_update_memcachier:
+            last_update_memcachier = value.pop(-1)
+            count_error = 0
+
+            new_sub_node_data, data_time = value
+            for device, device_data in new_sub_node_data.items():
+                tmpdict = {}
+                # Test if new updatetime is newer than last. Otherwise continue.
+                try:
+                    updatetime = datetime.fromisoformat(data_time[device])
+                except:
+                    continue
+                if updatetime >= last_update_remote[device]:
+                    for key, value in device_data.items():
+                        if key in sub_node_data[device] and _test_value(key, value * 100):
+                            tmpdict[key] = value
+                        else:
+                            break
+                    else:
+                        memcache.set(f"weather_data_{rem_key}", sub_node_data)
+                        last_update_remote[device] = updatetime
+                        with lock:
+                            sub_node_data[device].update(tmpdict)
+                            sub_node_new_values[device] = True
 
 
 # mqtt function does all the heavy lifting sorting out bad data.
-def schedule_setup(tmp_data: dict, new_values: dict):
+def schedule_setup(main_node_data: dict, main_node_new_values: dict):
     def querydb():
         # Check if there exist any values that should be queried. To reduce as much time with lock.
-        queryloc = []
-        for location, locdict in new_values.items():
-            if any(locdict.values()):
-                queryloc.append(location)
+        update_node = []
+        for sub_node, new_values in main_node_new_values.items():
+            if any(new_values.values()):
+                update_node.append(sub_node)
 
-        if not queryloc:
+        if not update_node:
             return
+
         # Copy data and set values to false.
-        querydata = {}
+        new_data = {}
         with lock:
-            for loc in queryloc:
-                querydata[loc] = []
-                for key, value in new_values[loc].items():
-                    if value:
-                        new_values[loc][key] = False
-                        querydata[loc].append((key, tmp_data[loc][key].copy()))
+            for sub_node in update_node:
+                new_data[sub_node] = []
+                for device, new_value in main_node_new_values[sub_node].items():
+                    if new_value:
+                        main_node_new_values[sub_node][device] = False
+                        new_data[sub_node].append((device, main_node_data[sub_node][device].copy()))
         time_now = datetime.now().isoformat("T", "minutes")
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
-        for locdata in querydata.values():
-            for measurer, valuedict in locdata:
-                mkey = measurer.split("/")[0]
-                for table, val in valuedict.items():
-                    cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {val})")
+        for sub_node_data in new_data.values():
+            for device, device_data in sub_node_data:
+                mkey = device.split("/")[0]
+                for table, value in device_data.items():
+                    cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {value})")
         db.commit()
         cursor.close()
 
     db = sqlite3.connect("/db/main_db.db")
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
+
 
 def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, status_path="balcony/relay/status"):
     def on_connect(client, *_):
@@ -246,13 +255,15 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, status_path="balco
 
 
 def _test_value(key, value) -> bool:
-    if isinstance(value, int):
+    try:
         if key == "Temperature":
             return -5000 <= value <= 6000
         elif key == "Humidity":
             return 0 <= value <= 10000
         elif key == "Airpressure":
             return 90000 <= value <= 115000
+    except:
+        pass
     return False
 
 
