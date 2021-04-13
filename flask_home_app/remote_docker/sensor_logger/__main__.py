@@ -40,8 +40,6 @@ def main():
         new_values = {key: False for key in tmpdata}
         last_update = {key: None for key in tmpdata}
 
-
-
         # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         try:
             loop = asyncio.get_event_loop()
@@ -124,13 +122,12 @@ def on_message(tmpdata, new_values, last_update, message):
 
 
 async def querydb(tmpdata: dict, new_values: dict):
-    while not any(new_values.values()):
-        await asyncio.sleep(5)
     while 1:
         # Old algo ((1800 - dt.minute * 60 - 1) % 1800) - dt.second + 1
 
         # Get time to sleep. Expensive algorithm, but queries are few.
         dt = datetime.now()
+        # This will always get next 30minutes. If time is 00:00, then 00:30...
         nt = dt.replace(second=0, microsecond=0) + timedelta(minutes=(30 - dt.minute - 1) % 30 + 1)
         await asyncio.sleep((nt - dt).total_seconds())
         # If timer gone too fast and there are seconds left, wait the remaining time, else continue.
@@ -139,23 +136,24 @@ async def querydb(tmpdata: dict, new_values: dict):
         if not any(new_values.values()):
             continue
         try:
-            dt = nt.isoformat("T", "minutes")
             # Copy values because we don't know how long time the queries will take.
-            tmp_dict = {}
+            # Async allows for mutex since we explicit tells it when it's ok to give control to the event loop.
+            tmplist = []
             for key, value in new_values.items():
-                if value:
+                if not value:
                     new_values[key] = False
-                    tmp_dict[key] = tmpdata[key].copy()
+                    tmplist.append((key, tmpdata[key].copy()))
+            # Convert nt to a string. Overwrite the old variable since it won't be used until next loop.
+            nt = nt.isoformat("T", "minutes")
             async with aiosqlite.connect("/db/remote_sh.db") as db:
-                await db.execute(f"INSERT INTO Timestamp VALUES ('{dt}')")
-                for measurer, data in tmp_dict.items():
-                    mkey = measurer.split("/")[0]
+                await db.execute(f"INSERT INTO Timestamp VALUES ('{nt}')")
+                for measurer, data in tmplist:
+                    mkey = measurer.partition("/")[0]
                     for tb, val in data.items():
-                        await db.execute(f"INSERT INTO {tb} VALUES ('{mkey}', '{dt}', {val})")
+                        await db.execute(f"INSERT INTO {tb} VALUES ('{mkey}', '{nt}', {val})")
                 await db.commit()
         except:
             pass
-
 
 async def read_temp(tmpdata: dict, new_values: dict, measurer: str, last_update: dict):
     while 1:

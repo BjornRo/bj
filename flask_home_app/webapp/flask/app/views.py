@@ -31,7 +31,7 @@ def notes_api():
             if request.method == "GET":
                 count = int(request.args.get("c"))
                 if count == Notes.query.count():
-                    return ("", 204)
+                    return jsonify([])
                 return jsonify(
                     [
                         {

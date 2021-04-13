@@ -169,22 +169,20 @@ def schedule_setup(tmp_data: dict, new_values: dict):
 
         if not queryloc:
             return
-
-        # Copy tmpdata, slight mistiming doesn't matter but if one thread changes to -99 while reading...
-        # Set values to false to reduce time with lock. In case I/O gets slowed down...
+        # Copy data and set values to false.
+        querydata = {}
         with lock:
-            tmpdata = tmp_data.copy()
-            new_val = new_values.copy()
             for loc in queryloc:
-                for k in new_values[loc]:
-                    new_values[loc][k] = False
+                querydata[loc] = []
+                for key, value in new_values[loc].items():
+                    if value:
+                        new_values[loc][key] = False
+                        querydata[loc].append((key, tmp_data[loc][key].copy()))
         time_now = datetime.now().isoformat("T", "minutes")
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
-        for location in queryloc:
-            for measurer, valuedict in tmpdata[location].items():
-                if not new_val[location][measurer]:
-                    continue
+        for locdata in querydata.values():
+            for measurer, valuedict in locdata:
                 mkey = measurer.split("/")[0]
                 for table, val in valuedict.items():
                     cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {val})")
