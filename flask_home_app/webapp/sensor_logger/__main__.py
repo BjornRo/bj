@@ -123,6 +123,7 @@ def remote_fetcher(remotedata, rem_new_values, memcache, rem_key):
                         value = value2
 
             # At this point value or exception thrown.
+            memcache.set("remote_sh_rawdata", value)
             this_time = datetime.fromisoformat(value.pop(-1))
             if this_time >= last_update_memcachier:
                 last_update_memcachier = this_time

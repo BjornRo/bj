@@ -12,6 +12,9 @@ import aiosqlite
 import asyncio
 import aiofiles
 
+cfg = configparser.ConfigParser()
+cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
+
 # Defined read only global variables
 # Find the device file to read from.
 device_file = glob.glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
@@ -37,8 +40,7 @@ def main():
         new_values = {key: False for key in tmpdata}
         last_update = {key: None for key in tmpdata}
 
-        cfg = configparser.ConfigParser()
-        cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
+
 
         # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         try:
@@ -46,7 +48,7 @@ def main():
             loop.create_task(mqtt_agent(tmpdata, new_values, last_update))
             loop.create_task(read_temp(tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
-            loop.create_task(memcache_as(cfg, tmpdata, last_update))
+            loop.create_task(memcache_as(tmpdata, last_update))
             loop.run_forever()
         finally:
             try:
@@ -58,7 +60,7 @@ def main():
                 asyncio.set_event_loop(asyncio.new_event_loop())
 
 
-async def memcache_as(cfg, tmpdata, last_update):
+async def memcache_as(tmpdata, last_update):
     loop = asyncio.get_event_loop()
     m1 = mClient((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     m2 = mClient((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
@@ -122,12 +124,12 @@ def on_message(tmpdata, new_values, last_update, message):
 
 
 async def querydb(tmpdata: dict, new_values: dict):
-    while not all(new_values.values()):
+    while not any(new_values.values()):
         await asyncio.sleep(5)
     while 1:
         # Old algo ((1800 - dt.minute * 60 - 1) % 1800) - dt.second + 1
 
-        # Get time to sleep
+        # Get time to sleep. Expensive algorithm, but queries are few.
         dt = datetime.now()
         nt = dt.replace(second=0, microsecond=0) + timedelta(minutes=(30 - dt.minute - 1) % 30 + 1)
         await asyncio.sleep((nt - dt).total_seconds())
@@ -139,16 +141,14 @@ async def querydb(tmpdata: dict, new_values: dict):
         try:
             dt = nt.isoformat("T", "minutes")
             # Copy values because we don't know how long time the queries will take.
-            # Since we have a lot of "dead" time between the calls, might just open/close db.
-            # Database has 29min to do its work with the copied values...
-            tmpdata_copy, new_values_copy = tmpdata.copy(), new_values.copy()
-            for key in new_values:
-                new_values[key] = False
+            tmp_dict = {}
+            for key, value in new_values.items():
+                if value:
+                    new_values[key] = False
+                    tmp_dict[key] = tmpdata[key].copy()
             async with aiosqlite.connect("/db/remote_sh.db") as db:
                 await db.execute(f"INSERT INTO Timestamp VALUES ('{dt}')")
-                for measurer, data in tmpdata_copy.items():
-                    if not new_values_copy[measurer]:
-                        continue
+                for measurer, data in tmp_dict.items():
                     mkey = measurer.split("/")[0]
                     for tb, val in data.items():
                         await db.execute(f"INSERT INTO {tb} VALUES ('{mkey}', '{dt}', {val})")
