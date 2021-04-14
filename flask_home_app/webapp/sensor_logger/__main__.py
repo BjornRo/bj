@@ -7,8 +7,11 @@ import schedule
 import time
 from pymemcache.client.base import PooledClient
 import json
+from bmemcached import Client
+import configparser
+import pathlib
 
-
+cfg = configparser.ConfigParser()
 lock = Lock()
 
 # Datastructure is in the form of:
@@ -64,7 +67,7 @@ def main():
             memcache_local,
             "remote_sh",
         ),
-        daemon=True,
+        daemon=True
     ).start()
     schedule_setup(main_node_data, main_node_new_values)
 
@@ -82,13 +85,9 @@ def main():
         time.sleep(10)
 
 
-def remote_fetcher(sub_node_data, sub_node_new_values, memcache, rem_key):
-    from bmemcached import Client
-    import configparser
-    import pathlib
-
-    def test_values_and_compare(value1, value2):
-        # Get the latest value from two sources.. woohoo
+def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key):
+    def test_compare_restore(value1, value2):
+        # Get the latest value from two sources that may lag or timeout.. woohoo
         # Test every possiblity...Try catch to reduce if statements.
         try:
             if value1 is None:
@@ -97,8 +96,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, rem_key):
                 if value2 is None:
                     value = json.loads(value1)
                 else:
-                    value1 = json.loads(value1)
-                    value2 = json.loads(value2)
+                    value1, value2 = json.loads(value1), json.loads(value2)
                     try:
                         t1 = datetime.fromisoformat(value1.pop(-1))
                         try:
@@ -113,8 +111,6 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, rem_key):
             pass
         return None
 
-    # This could be a great use of asyncio... Maybe when I understand it for a later project.
-    cfg = configparser.ConfigParser()
     cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
     memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
@@ -124,7 +120,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, rem_key):
     last_update_memcachier = datetime.now()  # Just as init
     while 1:
         time.sleep(15)
-        value = test_values_and_compare(memcachier1.get(rem_key), memcachier2.get(rem_key))
+        value = test_compare_restore(memcachier1.get(remote_key), memcachier2.get(remote_key))
         if value is None:
             count_error += 1
             if count_error >= 20:
@@ -158,7 +154,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, rem_key):
                         else:
                             break
                     else:
-                        memcache.set(f"weather_data_{rem_key}", sub_node_data)
+                        memcache.set(f"weather_data_{remote_key}", sub_node_data)
                         last_update_remote[device] = updatetime
                         with lock:
                             sub_node_data[device].update(tmpdict)
