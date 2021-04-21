@@ -1,28 +1,27 @@
 from datetime import datetime, timedelta
-import json
-import glob
-import configparser
-import pathlib
-from aiosqlite.core import connect
+from json import dumps as jsondumps
+from glob import glob
+from configparser import ConfigParser
+from pathlib import Path
 from bmemcached import Client as mClient
 from time import sleep
 
-from asyncio_mqtt import Client
-import aiosqlite
 import asyncio
-import aiofiles
-
-cfg = configparser.ConfigParser()
-cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
-
-# Defined read only global variables
-# Find the device file to read from.
-device_file = glob.glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
-# To stop subscribing to non-existing devices.
-sub_denylist = ("pizw/temp",)
+from asyncio_mqtt import Client
+from aiosqlite import connect as dbconnect
+from aiofiles import open as async_open
 
 
 def main():
+    cfg = ConfigParser()
+    cfg.read(Path(__file__).parent.absolute() / "config.ini")
+
+    # Defined read only global variables
+    # Find the device file to read from.
+    file_addr = glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
+    # To stop subscribing to non-existing devices.
+    sub_denylist = ("pizw/temp",)
+
     while 1:
         # Datastructure is in the form of:
         #  devicename/measurements: for each measurement type: value.
@@ -37,16 +36,16 @@ def main():
                 "Airpressure": -99,
             },
         }
-        new_values = {key: False for key in tmpdata}
-        last_update = {key: None for key in tmpdata}
+        new_values = {key: False for key in tmpdata}  # For DB-query
+        last_update = {key: None for key in tmpdata}  # For main node to know when sample was taken.
 
         # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         try:
             loop = asyncio.get_event_loop()
-            loop.create_task(mqtt_agent(tmpdata, new_values, last_update))
-            loop.create_task(read_temp(tmpdata, new_values, "pizw/temp", last_update))
+            loop.create_task(mqtt_agent(sub_denylist, tmpdata, new_values, last_update))
+            loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
-            loop.create_task(memcache_as(tmpdata, last_update))
+            loop.create_task(memcache_as(cfg, tmpdata, last_update))
             loop.run_forever()
         finally:
             try:
@@ -58,13 +57,14 @@ def main():
                 asyncio.set_event_loop(asyncio.new_event_loop())
 
 
-async def memcache_as(tmpdata, last_update):
+async def memcache_as(cfg, tmpdata, last_update):
     loop = asyncio.get_event_loop()
     m1 = mClient((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     m2 = mClient((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 
     def memcache():
-        data = json.dumps((tmpdata, last_update, datetime.now().isoformat()))
+        # Get the data, don't care about race conditions.
+        data = jsondumps((tmpdata, last_update, datetime.now().isoformat()))
         m1.set("remote_sh", data)
         m2.set("remote_sh", data)
 
@@ -76,7 +76,37 @@ async def memcache_as(tmpdata, last_update):
             pass
 
 
-async def mqtt_agent(tmpdata, new_values, last_update):
+async def mqtt_agent(sub_denylist, tmpdata, new_values, last_update):
+    # Since mqtt_agent is async, thus this is sync, no race conditions.
+    #  -> Either MQTT or SQL, but not both.
+    def on_message(message):
+        # Payload is in form of bytes.
+        try:
+            msg = message.payload
+            # Check if string has ( and ) or [ and ]
+            if (msg[0] == 40 and msg[-1] == 41) or (msg[0] == 91 and msg[-1] == 93):
+                listlike = tuple(map(int, msg[1:-1].split(b",")))
+            elif msg.isdigit():  # A number.
+                listlike = (int(msg),)
+            else:  # dict
+                # listlike = json.loads(msg) #can't handle json...
+                return
+            # Handle the topic depending on what it is about.
+            topic = message.topic[7:]  # Topic is decoded with utf8
+            if len(listlike) != len(tmpdata[topic]):
+                return
+
+            for key, value in zip(tmpdata[topic], listlike):
+                # If a device sends bad data break and don't set flag as newer value.
+                if not _test_value(key, value):
+                    break
+                tmpdata[topic][key] = value / 100
+            else:
+                new_values[topic] = True
+                last_update[topic] = datetime.now().isoformat()
+        except:  # Unsupported datastructures or invalid values
+            return
+
     while 1:
         try:
             async with Client("192.168.1.200") as client:
@@ -85,40 +115,10 @@ async def mqtt_agent(tmpdata, new_values, last_update):
                         await client.subscribe("landet/" + topic)
                 async with client.unfiltered_messages() as messages:
                     async for message in messages:
-                        on_message(tmpdata, new_values, last_update, message)
+                        on_message(message)
         except:
             pass
         await asyncio.sleep(5)
-
-
-# Since mqtt_agent is async, thus this is sync, no race conditions.
-#  -> Either MQTT or SQL, but not both.
-def on_message(tmpdata, new_values, last_update, message):
-    # Get values into a __iter__ form. msg is in bytes
-    try:
-        msg = message.payload
-        # Check if string has ( and ) or [ and ]
-        if (msg[0] == 40 and msg[-1] == 41) or (msg[0] == 91 and msg[-1] == 93):
-            listlike = tuple(map(int, msg[1:-1].split(b",")))
-        elif msg.isdigit():
-            listlike = (int(msg),)
-        else:  # dict
-            listlike = json.loads(msg)
-        # Handle the topic depending on what it is about.
-        topic = message.topic[7:]
-        if len(listlike) != len(tmpdata[topic]):
-            return
-
-        for key, value in zip(tmpdata[topic], listlike):
-            # If a device sends bad data -> break and discard, else update
-            if not _test_value(key, value):
-                break
-            tmpdata[topic][key] = value / 100
-        else:
-            new_values[topic] = True
-            last_update[topic] = datetime.now().isoformat()
-    except:  # Unsupported datastructures or invalid values
-        return
 
 
 async def querydb(tmpdata: dict, new_values: dict):
@@ -145,7 +145,7 @@ async def querydb(tmpdata: dict, new_values: dict):
                     tmplist.append((key, tmpdata[key].copy()))
             # Convert nt to a string. Overwrite the old variable since it won't be used until next loop.
             nt = nt.isoformat("T", "minutes")
-            async with aiosqlite.connect("/db/remote_sh.db") as db:
+            async with dbconnect("/db/remote_sh.db") as db:
                 await db.execute(f"INSERT INTO Timestamp VALUES ('{nt}')")
                 for measurer, data in tmplist:
                     mkey = measurer.partition("/")[0]
@@ -155,32 +155,35 @@ async def querydb(tmpdata: dict, new_values: dict):
         except:
             pass
 
-async def read_temp(tmpdata: dict, new_values: dict, measurer: str, last_update: dict):
+
+async def read_temp(file_addr: str, tmpdata: dict, new_values: dict, topic: str, last_update: dict):
     while 1:
         found = False
         try:
-            async with aiofiles.open(device_file, "r") as f:
+            async with async_open(file_addr, "r") as f:
                 async for line in f:
                     line = line.strip()
                     if not found and line[-3:] == "YES":
                         found = True
                         continue
-                    elif found:
-                        equals_pos = line.find("t=")
-                        if equals_pos != -1 and (tmp_val := line[equals_pos + 2 :]).isdigit():
-                            conv_val = round(int(tmp_val) / 1000, 1)
-                            if _test_value("Temperature", conv_val * 100):
-                                tmpdata[measurer]["Temperature"] = conv_val
-                                new_values[measurer] = True
-                                last_update[measurer] = datetime.now().isoformat()
+                    elif found and (eq_pos := line.find("t=")) != -1:
+                        if (tmp_val := line[eq_pos + 2 :]).isdigit():
+                            conv_val = round(int(tmp_val) / 1000, 1)  # 28785 -> 28.785 -> 28.8
+                            if _test_value("Temperature", conv_val, 100):
+                                tmpdata[topic]["Temperature"] = conv_val
+                                new_values[topic] = True
+                                last_update[topic] = datetime.now().isoformat()
                     break
         except:
             pass
         await asyncio.sleep(4)
 
 
-def _test_value(key, value) -> bool:
+# Simplified to try catch since we want to compare numbers and not another datatype.
+# Less computation for a try/except block than isinstance...
+def _test_value(key, value, magnitude=1) -> bool:
     try:
+        value *= magnitude
         if key == "Temperature":
             return -5000 <= value <= 6000
         elif key == "Humidity":
