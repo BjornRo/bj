@@ -5,6 +5,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from bmemcached import Client as mClient
 from time import sleep
+import jsonpickle
 
 import asyncio
 from asyncio_mqtt import Client
@@ -48,7 +49,7 @@ def main():
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
             loop.create_task(memcache_as(cfg, tmpdata, last_update))
-            loop.create_task(low_lvl_http((tmpdata, last_update)))
+            loop.create_task(low_lvl_http((tmpdata, last_update), cfg["GETDATA"]["token"]))
             loop.run_forever()
         finally:
             try:
@@ -62,20 +63,53 @@ def main():
 
 # Update ip, might as well add updating ip here too...
 async def update_ip(cfg):
-    url = cfg["DUCK"]["addr"].format(cfg["DUCK"]["domain"], cfg["DUCK"]["token"])
+    url = f'{cfg["DDNS"]["addr"]}/{cfg["DDNS"]["domain"]}/{cfg["DDNS"]["token"]}'
     while 1:
-        try:
-            async with ClientSession() as session:
+        async with ClientSession() as session:
+            try:
                 await session.get(url)
-        except:
-            pass
+            except:
+                pass
         await asyncio.sleep(900)
 
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
-async def low_lvl_http(tmpdata_last_update):
+async def low_lvl_http(tmpdata_last_update, token):
+    query = """
+WITH hydrofordata AS (
+SELECT time, temperature AS htemp, humidity, airpressure
+FROM Temperature
+NATURAL JOIN Humidity
+NATURAL JOIN Airpressure
+WHERE measurer = 'hydrofor'),
+pizwdata AS (
+SELECT time, temperature AS ptemp
+FROM Temperature
+WHERE measurer = 'pizw')
+SELECT h.time, htemp, humidity, airpressure, ptemp
+FROM hydrofordata h
+LEFT OUTER JOIN pizwdata p ON h.time = p.time
+"""
+
     async def handler(request: web.Request):
-        return web.json_response(tmpdata_last_update)
+        try:
+            rel_url = str(request.rel_url)[1:].split("/")
+            if "status" == rel_url[0] and "get" == rel_url[1]:
+                return web.json_response(tmpdata_last_update)
+            # Can't decide on query vs sending the file. Just have both ready for usage.
+            if token == rel_url[0]:
+                if "query" == rel_url[1]:
+                    async with dbconnect("/db/remote_sh.db") as db:
+                        async with db.execute(query) as c:
+                            return web.json_response(
+                                [("time", "htemp", "hhumid", "hpress", "ptemp"), await c.fetchall()]
+                            )
+                if "file" == rel_url[1]:
+                    async with async_open("/db/remote_sh.db", "rb") as f:
+                        return web.Response(text=jsonpickle.encode(await f.read()))
+        except:
+            pass
+        return web.Response(status=500)
 
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
@@ -166,7 +200,7 @@ async def querydb(tmpdata: dict, new_values: dict):
             # Async allows for mutex since we explicit tells it when it's ok to give control to the event loop.
             tmplist = []
             for key, value in new_values.items():
-                if not value:
+                if value:
                     new_values[key] = False
                     tmplist.append((key, tmpdata[key].copy()))
             # Convert nt to a string. Overwrite the old variable since it won't be used until next loop.
