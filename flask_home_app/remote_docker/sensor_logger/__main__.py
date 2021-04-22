@@ -62,7 +62,7 @@ def main():
 
 # Update ip, might as well add updating ip here too...
 async def update_ip(cfg):
-    url = f"https://www.duckdns.org/update?domains={cfg['DUCK']['domain']}&token={cfg['DUCK']['token']}"
+    url = cfg["DUCK"]["addr"].format(cfg["DUCK"]["domain"], cfg["DUCK"]["token"])
     while 1:
         try:
             async with ClientSession() as session:
