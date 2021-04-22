@@ -20,17 +20,3 @@ services:
     ports:
       - 0.0.0.0:42660:42660
     privileged: true
-
-  duckdns:
-    container_name: duckdns
-    build: ./duckdns
-    #environment:
-        #- PUID=1000 #optional
-        #- PGID=1000 #optional
-        #- TZ=Europe/Stockholm
-        #- SUBDOMAINS=subdomain1
-        #- TOKEN=token
-        #- LOG_FILE=false #optional
-    #volumes:
-    #    - /path/to/appdata/config:/config #optional
-    restart: always

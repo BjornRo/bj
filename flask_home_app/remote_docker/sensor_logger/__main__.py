@@ -43,6 +43,7 @@ def main():
         # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         try:
             loop = asyncio.get_event_loop()
+            loop.create_task(update_ip(cfg))
             loop.create_task(mqtt_agent(sub_denylist, tmpdata, new_values, last_update))
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
@@ -59,9 +60,16 @@ def main():
                 asyncio.set_event_loop(asyncio.new_event_loop())
 
 
-# Update ip
+# Update ip, might as well add updating ip here too...
 async def update_ip(cfg):
-    domain, token = cfg['DUCK']['domain'], cfg['DUCK']['token']
+    url = f"https://www.duckdns.org/update?domains={cfg['DUCK']['domain']}&token={cfg['DUCK']['token']}"
+    while 1:
+        try:
+            async with ClientSession() as session:
+                await session.get(url)
+        except:
+            pass
+        await asyncio.sleep(900)
 
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
