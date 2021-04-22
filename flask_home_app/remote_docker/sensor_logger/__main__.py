@@ -10,6 +10,7 @@ import asyncio
 from asyncio_mqtt import Client
 from aiosqlite import connect as dbconnect
 from aiofiles import open as async_open
+from aiohttp import web
 
 
 def main():
@@ -46,6 +47,7 @@ def main():
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
             loop.create_task(memcache_as(cfg, tmpdata, last_update))
+            loop.create_task(low_lvl_http((tmpdata, last_update)))
             loop.run_forever()
         finally:
             try:
@@ -55,6 +57,17 @@ def main():
                 loop.close()
                 sleep(20)
                 asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+# Simple server to get data with HTTP. Trial to eventually replace memcachier.
+async def low_lvl_http(tmpdata_last_update):
+    async def handler(request: web.Request):
+        return web.json_response(tmpdata_last_update)
+
+    runner = web.ServerRunner(web.Server(handler))
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 42660)
+    await site.start()
 
 
 async def memcache_as(cfg, tmpdata, last_update):

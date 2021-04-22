@@ -4,15 +4,16 @@ from datetime import datetime
 import sqlite3
 from threading import Thread, Lock
 import schedule
-import time
+from time import sleep
 from pymemcache.client.base import PooledClient
 import json
 from bmemcached import Client
-import configparser
-import pathlib
+from configparser import ConfigParser
+from pathlib import Path
 
-cfg = configparser.ConfigParser()
-lock = Lock()
+
+# Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
+# This is to compare the flavours of concurrency.
 
 # Datastructure is in the form of:
 #  devicename/measurements: for each measurement type: value.
@@ -44,18 +45,26 @@ def main():
         for sub_node, sub_node_data in main_node_data.items()
     }
 
+    # Setup memcache.
+    class JSerde(object):
+        def serialize(self, key, value):
+            return json.dumps(value), 2
+
     memcache_local = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=3)
 
-    # Set initial values.
+    # Set initial values for memcached.
     memcache_local.set("weather_data_home", main_node_data["home"])
     memcache_local.set("weather_data_remote_sh", main_node_data["remote_sh"])
 
+    # Lock to stop race conditions due to threading.
+    lock = Lock()
     Thread(
         target=mqtt_agent,
         args=(
             main_node_data["home"],
             main_node_new_values["home"],
             memcache_local,
+            lock,
         ),
         daemon=True,
     ).start()
@@ -66,14 +75,15 @@ def main():
             main_node_new_values["remote_sh"],
             memcache_local,
             "remote_sh",
+            lock,
         ),
-        daemon=True
+        daemon=True,
     ).start()
-    schedule_setup(main_node_data, main_node_new_values)
+    schedule_setup(main_node_data, main_node_new_values, lock)
 
     # Poll tmpdata until all Nones are gone.
     while 1:
-        time.sleep(1)
+        sleep(1)
         for sub_node_values in main_node_data["home"].values():
             if -99 in sub_node_values.values():
                 break
@@ -82,13 +92,13 @@ def main():
 
     while 1:
         schedule.run_pending()
-        time.sleep(10)
+        sleep(10)
 
 
-def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key):
+def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
     def test_compare_restore(value1, value2):
         # Get the latest value from two sources that may lag or timeout.. woohoo
-        # Test every possiblity...Try catch to reduce if statements.
+        # Test every possibility...Try catch to reduce if statements.
         try:
             if value1 is None:
                 value = json.loads(value2)
@@ -101,17 +111,18 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key):
                         t1 = datetime.fromisoformat(value1.pop(-1))
                         try:
                             t2 = datetime.fromisoformat(value2.pop(-1))
-                            return (*value1, t1) if t1 >= t2 else (*value2, t2)
+                            return [*value1, t1] if t1 >= t2 else [*value2, t2]
                         except:
-                            return (*value1, t1)
+                            return [*value1, t1]
                     except:
                         value = value2
-                return (*value[:2], datetime.fromisoformat(value[2]))
+                return [*value[:2], datetime.fromisoformat(value[2])]
         except:
             pass
         return None
 
-    cfg.read(pathlib.Path(__file__).parent.absolute() / "config.ini")
+    cfg = ConfigParser()
+    cfg.read(Path(__file__).parent.absolute() / "config.ini")
     memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 
@@ -119,7 +130,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key):
     last_update_remote = {key: datetime.now() for key in sub_node_data}
     last_update_memcachier = datetime.now()  # Just as init
     while 1:
-        time.sleep(15)
+        sleep(15)
         value = test_compare_restore(memcachier1.get(remote_key), memcachier2.get(remote_key))
         if value is None:
             count_error += 1
@@ -149,7 +160,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key):
                     continue
                 if updatetime >= last_update_remote[device]:
                     for key, value in device_data.items():
-                        if key in sub_node_data[device] and _test_value(key, value * 100):
+                        if key in sub_node_data[device] and _test_value(key, value, 100):
                             tmpdict[key] = value
                         else:
                             break
@@ -162,7 +173,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key):
 
 
 # mqtt function does all the heavy lifting sorting out bad data.
-def schedule_setup(main_node_data: dict, main_node_new_values: dict):
+def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock):
     def querydb():
         # Check if there exist any values that should be queried. To reduce as much time with lock.
         update_node = []
@@ -174,6 +185,7 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict):
             return
 
         # Copy data and set values to false.
+        time_now = datetime.now().isoformat("T", "minutes")
         new_data = {}
         with lock:
             for sub_node in update_node:
@@ -182,7 +194,6 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict):
                     if new_value:
                         main_node_new_values[sub_node][device] = False
                         new_data[sub_node].append((device, main_node_data[sub_node][device].copy()))
-        time_now = datetime.now().isoformat("T", "minutes")
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
         for sub_node_data in new_data.values():
@@ -193,12 +204,13 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict):
         db.commit()
         cursor.close()
 
+    # Due to the almost non-existing concurrency, just keep conn alive.
     db = sqlite3.connect("/db/main_db.db")
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
 
 
-def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, status_path="balcony/relay/status"):
+def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock: Lock):
     def on_connect(client, *_):
         for topic in list(h_tmpdata.keys()) + [status_path]:
             client.subscribe("home/" + topic)
@@ -237,6 +249,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, status_path="balco
                 h_new_values[topic] = True
 
     # Setup and connect mqtt client. Return client object.
+    status_path = "balcony/relay/status"
     client = mqtt.Client("br_logger")
     client.on_connect = on_connect
     client.on_message = on_message
@@ -246,12 +259,13 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, status_path="balco
                 break
         except:
             pass
-        time.sleep(5)
+        sleep(5)
     client.loop_forever()
 
 
-def _test_value(key, value) -> bool:
+def _test_value(key, value, magnitude=1) -> bool:
     try:
+        value *= magnitude
         if key == "Temperature":
             return -5000 <= value <= 6000
         elif key == "Humidity":
@@ -261,12 +275,6 @@ def _test_value(key, value) -> bool:
     except:
         pass
     return False
-
-
-# setup memcache
-class JSerde(object):
-    def serialize(self, key, value):
-        return json.dumps(value), 2
 
 
 if __name__ == "__main__":

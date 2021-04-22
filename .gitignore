@@ -3,6 +3,7 @@
 .vscode
 out/
 trash/
+duckdns/
 __pycache__/
 
 # Secret sauce #

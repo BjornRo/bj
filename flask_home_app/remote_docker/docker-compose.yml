@@ -17,4 +17,20 @@ services:
       - /home/pi/appdata:/db
     depends_on:
       - mqtt
+    ports:
+      - 0.0.0.0:42660:42660
     privileged: true
+
+duckdns:
+    image: ghcr.io/linuxserver/duckdns
+    container_name: duckdns
+    environment:
+        #- PUID=1000 #optional
+        #- PGID=1000 #optional
+        - TZ=Europe/Stockholm
+        - SUBDOMAINS=subdomain1
+        - TOKEN=token
+        - LOG_FILE=false #optional
+    #volumes:
+    #    - /path/to/appdata/config:/config #optional
+    restart: unless-stopped
