@@ -123,6 +123,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
 
     cfg = ConfigParser()
     cfg.read(Path(__file__).parent.absolute() / "config.ini")
+    cfg.read("C:\\Users\\bjorn\\Documents\\git_repos\\doodle_repo\\flask_home_app\\webapp\\sensor_logger\\config.ini")
     memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 
@@ -132,7 +133,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
     while 1:
         sleep(15)
         value = test_compare_restore(memcachier1.get(remote_key), memcachier2.get(remote_key))
-        if value is None:
+        if value is None or value[2] <= last_update_memcachier:
             count_error += 1
             if count_error >= 20:
                 # Set to invalid values after n attempts. Reset counter.
@@ -146,30 +147,29 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
 
         # At this point valid value or exception thrown.
         memcache.set("remote_sh_rawdata", (*value[:2], value[2].isoformat()))
-        if value[2] >= last_update_memcachier:
-            last_update_memcachier = value.pop(-1)
-            count_error = 0
+        last_update_memcachier = value.pop(-1)
+        count_error = 0
 
-            new_sub_node_data, data_time = value
-            for device, device_data in new_sub_node_data.items():
-                tmpdict = {}
-                # Test if new updatetime is newer than last. Otherwise continue.
-                try:
-                    updatetime = datetime.fromisoformat(data_time[device])
-                except:
-                    continue
-                if updatetime >= last_update_remote[device]:
-                    for key, value in device_data.items():
-                        if key in sub_node_data[device] and _test_value(key, value, 100):
-                            tmpdict[key] = value
-                        else:
-                            break
+        new_sub_node_data, data_time = value
+        for device, device_data in new_sub_node_data.items():
+            tmpdict = {}
+            # Test if new updatetime is newer than last. Otherwise continue.
+            try:
+                updatetime = datetime.fromisoformat(data_time[device])
+            except:
+                continue
+            if updatetime > last_update_remote[device]:
+                for key, value in device_data.items():
+                    if key in sub_node_data[device] and _test_value(key, value, 100):
+                        tmpdict[key] = value
                     else:
-                        memcache.set(f"weather_data_{remote_key}", sub_node_data)
-                        last_update_remote[device] = updatetime
-                        with lock:
-                            sub_node_data[device].update(tmpdict)
-                            sub_node_new_values[device] = True
+                        break
+                else:
+                    memcache.set(f"weather_data_{remote_key}", sub_node_data)
+                    last_update_remote[device] = updatetime
+                    with lock:
+                        sub_node_data[device].update(tmpdict)
+                        sub_node_new_values[device] = True
 
 
 # mqtt function does all the heavy lifting sorting out bad data.
