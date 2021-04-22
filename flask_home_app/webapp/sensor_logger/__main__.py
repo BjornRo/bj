@@ -123,7 +123,6 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
 
     cfg = ConfigParser()
     cfg.read(Path(__file__).parent.absolute() / "config.ini")
-    cfg.read("C:\\Users\\bjorn\\Documents\\git_repos\\doodle_repo\\flask_home_app\\webapp\\sensor_logger\\config.ini")
     memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 

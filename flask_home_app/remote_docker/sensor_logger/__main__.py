@@ -10,7 +10,7 @@ import asyncio
 from asyncio_mqtt import Client
 from aiosqlite import connect as dbconnect
 from aiofiles import open as async_open
-from aiohttp import web
+from aiohttp import web, ClientSession
 
 
 def main():
@@ -57,6 +57,11 @@ def main():
                 loop.close()
                 sleep(20)
                 asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+# Update ip
+async def update_ip(cfg):
+    domain, token = cfg['DUCK']['domain'], cfg['DUCK']['token']
 
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
