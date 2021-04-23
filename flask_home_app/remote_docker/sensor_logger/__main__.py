@@ -5,7 +5,8 @@ from configparser import ConfigParser
 from pathlib import Path
 from bmemcached import Client as mClient
 from time import sleep
-import jsonpickle
+from jsonpickle import encode as jpencode
+from zlib import compress
 
 import asyncio
 from asyncio_mqtt import Client
@@ -67,7 +68,8 @@ async def update_ip(cfg):
     while 1:
         async with ClientSession() as session:
             try:
-                await session.get(url)
+                async with session.get(url) as r:
+                    pass
             except:
                 pass
         await asyncio.sleep(900)
@@ -76,20 +78,35 @@ async def update_ip(cfg):
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
 async def low_lvl_http(tmpdata_last_update, token):
     query = """
-WITH hydrofordata AS (
-SELECT time, temperature AS htemp, humidity, airpressure
+SELECT t.time, htemp, humid, press, ptemp
+FROM Timestamp t
+LEFT OUTER JOIN
+(SELECT time, temperature AS htemp
 FROM Temperature
-NATURAL JOIN Humidity
-NATURAL JOIN Airpressure
-WHERE measurer = 'hydrofor'),
-pizwdata AS (
-SELECT time, temperature AS ptemp
+WHERE measurer = 'hydrofor') a ON t.time = a.time
+LEFT OUTER JOIN
+(SELECT time, humidity As humid
+FROM Humidity
+WHERE measurer = 'hydrofor') b ON t.time = b.time
+LEFT OUTER JOIN
+(SELECT time, airpressure AS press
+FROM Airpressure
+WHERE measurer = 'hydrofor') c ON t.time = c.time
+LEFT OUTER JOIN
+(SELECT time, temperature AS ptemp
 FROM Temperature
-WHERE measurer = 'pizw')
-SELECT h.time, htemp, humidity, airpressure, ptemp
-FROM hydrofordata h
-LEFT OUTER JOIN pizwdata p ON h.time = p.time
-"""
+WHERE measurer = 'pizw') d ON t.time = d.time"""
+
+    last_request = [datetime.now()] * 2
+    last_data = ["null"] * 2
+    columns = ("time", "htemp", "humid", "press", "ptemp")
+
+    # Adds 30 min to "cache" the data.
+    def update_data(method_idx: int, request_time: list, delta: int = 30) -> bool:
+        time_now = datetime.now()
+        if boolean := request_time[method_idx] < time_now:
+            request_time[method_idx] = time_now + timedelta(minutes=delta)
+        return boolean
 
     async def handler(request: web.Request):
         try:
@@ -99,14 +116,16 @@ LEFT OUTER JOIN pizwdata p ON h.time = p.time
             # Can't decide on query vs sending the file. Just have both ready for usage.
             if token == rel_url[0]:
                 if "query" == rel_url[1]:
-                    async with dbconnect("/db/remote_sh.db") as db:
-                        async with db.execute(query) as c:
-                            return web.json_response(
-                                [("time", "htemp", "hhumid", "hpress", "ptemp"), await c.fetchall()]
-                            )
+                    if update_data(0, last_request):
+                        async with dbconnect("/db/remote_sh.db") as db:
+                            async with db.execute(query) as c:
+                                last_data[0] = jsondumps((columns, await c.fetchall()))
+                    return web.Response(text=last_data[0])
                 if "file" == rel_url[1]:
-                    async with async_open("/db/remote_sh.db", "rb") as f:
-                        return web.Response(text=jsonpickle.encode(await f.read()))
+                    if update_data(1, last_request):
+                        async with async_open("/db/remote_sh.db", "rb") as f:
+                            last_data[1] = jpencode(compress(await f.read(), 9))
+                    return web.Response(text=last_data[1])
         except:
             pass
         return web.Response(status=500)
@@ -129,8 +148,8 @@ async def memcache_as(cfg, tmpdata, last_update):
         m2.set("remote_sh", data)
 
     while 1:
+        await asyncio.sleep(10)
         try:
-            await asyncio.sleep(10)
             await loop.run_in_executor(None, memcache)
         except:
             pass
