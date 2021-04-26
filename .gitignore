@@ -5,6 +5,7 @@ out/
 trash/
 duckdns/
 __pycache__/
+certbot/
 
 # Secret sauce #
 ################

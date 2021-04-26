@@ -7,6 +7,8 @@ from bmemcached import Client as mClient
 from time import sleep
 from jsonpickle import encode as jpencode
 from zlib import compress
+from OpenSSL import crypto
+import ssl
 
 import asyncio
 from asyncio_mqtt import Client
@@ -19,6 +21,9 @@ def main():
     cfg = ConfigParser()
     cfg.read(Path(__file__).parent.absolute() / "config.ini")
 
+    # Generate a new key
+    cert_gen(cfg)
+
     # Defined read only global variables
     # Find the device file to read from.
     file_addr = glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
@@ -30,9 +35,7 @@ def main():
         #  devicename/measurements: for each measurement type: value.
         # New value is a flag to know if value has been updated since last SQL-query. -> Each :00, :30
         tmpdata = {
-            "pizw/temp": {
-                "Temperature": -99,
-            },
+            "pizw/temp": {"Temperature": -99},
             "hydrofor/temphumidpress": {
                 "Temperature": -99,
                 "Humidity": -99,
@@ -68,7 +71,7 @@ async def update_ip(cfg):
     while 1:
         async with ClientSession() as session:
             try:
-                async with session.get(url) as r:
+                async with session.get(url) as _:
                     pass
             except:
                 pass
@@ -130,9 +133,11 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
             pass
         return web.Response(status=500)
 
+    sslc = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+    sslc.load_cert_chain('server.crt', 'server.key')
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 42660)
+    site = web.TCPSite(runner, "0.0.0.0", 42660, ssl_context=sslc)
     await site.start()
 
 
@@ -272,6 +277,29 @@ def _test_value(key, value, magnitude=1) -> bool:
     except:
         pass
     return False
+
+
+def cert_gen(cfg):
+    k = crypto.PKey()
+    k.generate_key(crypto.TYPE_RSA, 4096)
+    cert = crypto.X509()
+    cert.get_subject().C = cfg["SSL"]["country"]
+    cert.get_subject().ST = cfg["SSL"]["state"]
+    cert.get_subject().L = cfg["SSL"]["locality"]
+    cert.get_subject().O = cfg["SSL"]["org"]
+    cert.get_subject().OU = cfg["SSL"]["orgunit"]
+    cert.get_subject().CN = cfg["SSL"]["common"]
+    cert.get_subject().emailAddress = cfg["SSL"]["email"]
+    cert.set_serial_number(0)
+    cert.gmtime_adj_notBefore(0)
+    cert.gmtime_adj_notAfter(2 * 365 * 24 * 60 * 60)
+    cert.set_issuer(cert.get_subject())
+    cert.set_pubkey(k)
+    cert.sign(k, "sha512")
+    with open("server.crt", "wt") as f:
+        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("utf-8"))
+    with open("server.key", "wt") as f:
+        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
 
 
 if __name__ == "__main__":
