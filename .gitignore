@@ -52,3 +52,4 @@ private_encode.py
 *.log
 *.txt
 *.dat
+*.conf

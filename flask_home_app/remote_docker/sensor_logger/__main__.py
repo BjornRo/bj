@@ -7,9 +7,7 @@ from bmemcached import Client as mClient
 from time import sleep
 from jsonpickle import encode as jpencode
 from zlib import compress
-
-# from OpenSSL import crypto
-import ssl
+from ssl import SSLContext, PROTOCOL_TLSv1_2
 
 import asyncio
 from asyncio_mqtt import Client
@@ -23,10 +21,12 @@ def main():
     cfg.read(Path(__file__).parent.absolute() / "config.ini")
 
     # SSL Context
-
     sslpath = f'/certs/live/{cfg["DDNS"]["domain"]}/'
-    sslc = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-    sslc.load_cert_chain(sslpath + "fullchain.pem", sslpath + "privkey.pem")
+    #sslc = SSLContext(PROTOCOL_TLSv1_2)
+    #sslc.load_cert_chain(sslpath + "fullchain.pem", sslpath + "privkey.pem")
+    # TODO
+    # Uncomment and remove line below if certbot works.
+    sslc = None
 
     # Defined read only global variables
     # Find the device file to read from.
@@ -57,7 +57,7 @@ def main():
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
             loop.create_task(memcache_as(cfg, tmpdata, last_update))
-            loop.create_task(low_lvl_http((tmpdata, last_update), cfg["GETDATA"]["token"]))
+            loop.create_task(low_lvl_http((tmpdata, last_update), cfg["GETDATA"]["token"], sslc))
             loop.run_forever()
         finally:
             try:
@@ -282,6 +282,7 @@ def _test_value(key, value, magnitude=1) -> bool:
 
 # cert_gen(cfg)
 # def cert_gen(cfg):
+#     from OpenSSL import crypto
 #     k = crypto.PKey()
 #     k.generate_key(crypto.TYPE_RSA, 4096)
 #     cert = crypto.X509()
