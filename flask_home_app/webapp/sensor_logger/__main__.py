@@ -11,7 +11,6 @@ from bmemcached import Client
 from configparser import ConfigParser
 from pathlib import Path
 
-
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
 
@@ -45,6 +44,8 @@ def main():
         for sub_node, sub_node_data in main_node_data.items()
     }
 
+    cfg = ConfigParser()
+    cfg.read(Path(__file__).parent.absolute() / "config.ini")
     # Setup memcache.
     class JSerde(object):
         def serialize(self, key, value):
@@ -76,6 +77,7 @@ def main():
             memcache_local,
             "remote_sh",
             lock,
+            cfg,
         ),
         daemon=True,
     ).start()
@@ -95,7 +97,7 @@ def main():
         sleep(10)
 
 
-def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
+def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock, cfg):
     def test_compare_restore(value1, value2):
         # Get the latest value from two sources that may lag or timeout.. woohoo
         # Test every possibility...Try catch to reduce if statements.
@@ -121,8 +123,6 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
             pass
         return None
 
-    cfg = ConfigParser()
-    cfg.read(Path(__file__).parent.absolute() / "config.ini")
     memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
     memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
 

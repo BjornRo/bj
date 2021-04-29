@@ -13,20 +13,15 @@ import asyncio
 from asyncio_mqtt import Client
 from aiosqlite import connect as dbconnect
 from aiofiles import open as async_open
-from aiohttp import web, ClientSession
-
+from aiohttp import web
+# Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
 
 def main():
     cfg = ConfigParser()
     cfg.read(Path(__file__).parent.absolute() / "config.ini")
 
     # SSL Context
-    sslpath = f'/certs/live/{cfg["DDNS"]["domain"]}/'
-    #sslc = SSLContext(PROTOCOL_TLSv1_2)
-    #sslc.load_cert_chain(sslpath + "fullchain.pem", sslpath + "privkey.pem")
-    # TODO
-    # Uncomment and remove line below if certbot works.
-    sslc = None
+    sslpath = f'/etc/letsencrypt/live/{cfg["CERT"]["url"]}/'
 
     # Defined read only global variables
     # Find the device file to read from.
@@ -52,12 +47,11 @@ def main():
         # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         try:
             loop = asyncio.get_event_loop()
-            loop.create_task(update_ip(cfg))
             loop.create_task(mqtt_agent(sub_denylist, tmpdata, new_values, last_update))
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
             loop.create_task(memcache_as(cfg, tmpdata, last_update))
-            loop.create_task(low_lvl_http((tmpdata, last_update), cfg["GETDATA"]["token"], sslc))
+            loop.create_task(low_lvl_http((tmpdata, last_update), cfg["GETDATA"]["token"], sslpath))
             loop.run_forever()
         finally:
             try:
@@ -69,23 +63,10 @@ def main():
                 asyncio.set_event_loop(asyncio.new_event_loop())
 
 
-# Update ip, might as well add updating ip here too...
-async def update_ip(cfg):
-    url = f'{cfg["DDNS"]["addr"]}/{cfg["DDNS"]["domain"]}/{cfg["DDNS"]["token"]}'
-    while 1:
-        async with ClientSession() as session:
-            try:
-                async with session.get(url) as _:
-                    pass
-            except:
-                pass
-        await asyncio.sleep(900)
-
-
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
-async def low_lvl_http(tmpdata_last_update, token, ssl=None):
-    query = """
-SELECT t.time, htemp, humid, press, ptemp
+async def low_lvl_http(tmpdata_last_update, token, sslpath=None):
+    query = \
+"""SELECT t.time, htemp, humid, press, ptemp
 FROM Timestamp t
 LEFT OUTER JOIN
 (SELECT time, temperature AS htemp
@@ -137,10 +118,19 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
             pass
         return web.Response(status=500)
 
+    sslpath_tuple = (sslpath + "fullchain.pem", sslpath + "privkey.pem")
+    ssl = SSLContext(PROTOCOL_TLSv1_2)
+    ssl.load_cert_chain(*sslpath_tuple)
+
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 42660, ssl_context=ssl)
+    site = web.TCPSite(runner, None, 42660, ssl_context=ssl)
     await site.start()
+    # Reload ssl every day.
+    while 1:
+        await asyncio.sleep(86400)
+        ssl.load_cert_chain(*sslpath_tuple)
+
 
 
 async def memcache_as(cfg, tmpdata, last_update):
@@ -280,29 +270,6 @@ def _test_value(key, value, magnitude=1) -> bool:
         pass
     return False
 
-# cert_gen(cfg)
-# def cert_gen(cfg):
-#     from OpenSSL import crypto
-#     k = crypto.PKey()
-#     k.generate_key(crypto.TYPE_RSA, 4096)
-#     cert = crypto.X509()
-#     cert.get_subject().C = cfg["SSL"]["country"]
-#     cert.get_subject().ST = cfg["SSL"]["state"]
-#     cert.get_subject().L = cfg["SSL"]["locality"]
-#     cert.get_subject().O = cfg["SSL"]["org"]
-#     cert.get_subject().OU = cfg["SSL"]["orgunit"]
-#     cert.get_subject().CN = cfg["SSL"]["common"]
-#     cert.get_subject().emailAddress = cfg["SSL"]["email"]
-#     cert.set_serial_number(0)
-#     cert.gmtime_adj_notBefore(0)
-#     cert.gmtime_adj_notAfter(2 * 365 * 24 * 60 * 60)
-#     cert.set_issuer(cert.get_subject())
-#     cert.set_pubkey(k)
-#     cert.sign(k, "sha512")
-#     with open("server.crt", "wt") as f:
-#         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("utf-8"))
-#     with open("server.key", "wt") as f:
-#         f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k).decode("utf-8"))
 
 if __name__ == "__main__":
     main()
