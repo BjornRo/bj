@@ -13,9 +13,9 @@ def main():
     while 1:
         try:
             for i in netifaces.ifaddresses("wlan0")[netifaces.AF_INET6]:
-                if "fe80" == i['addr'][:4]:
+                if "fe80" == i["addr"][:4]:
                     continue
-                requests.get(url + i['addr'], timeout=timeout)
+                requests.get(url + i["addr"], timeout=timeout)
                 break
         except:
             pass
