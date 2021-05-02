@@ -5,8 +5,11 @@ from configparser import ConfigParser
 from pathlib import Path
 from bmemcached import Client as mClient
 from time import sleep
-from jsonpickle import encode as jpencode
-from zlib import compress
+
+# from jsonpickle import encode as jpencode
+# from zlib import compress
+import tarfile
+from io import BytesIO
 from ssl import SSLContext, PROTOCOL_TLSv1_2
 
 import asyncio
@@ -14,7 +17,12 @@ from asyncio_mqtt import Client
 from aiosqlite import connect as dbconnect
 from aiofiles import open as async_open
 from aiohttp import web
+
 # Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
+
+DEV_NAME = "remote_sh"
+DB_FILE = f"{DEV_NAME}.db"
+DB_FILEPATH = "/db/" + DB_FILE
 
 def main():
     cfg = ConfigParser()
@@ -65,8 +73,7 @@ def main():
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
 async def low_lvl_http(tmpdata_last_update, token, sslpath=None):
-    query = \
-"""SELECT t.time, htemp, humid, press, ptemp
+    query = """SELECT t.time, htemp, humid, press, ptemp
 FROM Timestamp t
 LEFT OUTER JOIN
 (SELECT time, temperature AS htemp
@@ -105,15 +112,26 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
             if token == rel_url[0]:
                 if "query" == rel_url[1]:
                     if update_data(0, last_request):
-                        async with dbconnect("/db/remote_sh.db") as db:
+                        async with dbconnect(DB_FILEPATH) as db:
                             async with db.execute(query) as c:
                                 last_data[0] = jsondumps((columns, await c.fetchall()))
                     return web.Response(text=last_data[0])
                 if "file" == rel_url[1]:
                     if update_data(1, last_request):
-                        async with async_open("/db/remote_sh.db", "rb") as f:
-                            last_data[1] = jpencode(compress(await f.read(), 9))
-                    return web.Response(text=last_data[1])
+                        async with async_open(DB_FILEPATH, "rb") as f:
+                            data = await f.read()
+                            source = BytesIO(initial_bytes=data)
+                        tardb = BytesIO()
+                        with tarfile.open(fileobj=tardb, mode="w:gz") as tar:
+                            info = tarfile.TarInfo(DB_FILE)
+                            info.size = len(data)
+                            tar.addfile(info, source)
+                        last_data[1] = tardb.getvalue()
+                    return web.Response(
+                        body=last_data[1],
+                        content_type="application/octet-stream",
+                        headers={"content-disposition": f'attachment; filename="{DEV_NAME}.tar.gz"'},
+                    )
         except:
             pass
         return web.Response(status=500)
@@ -132,7 +150,6 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
         ssl.load_cert_chain(*sslpath_tuple)
 
 
-
 async def memcache_as(cfg, tmpdata, last_update):
     loop = asyncio.get_event_loop()
     m1 = mClient((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
@@ -141,8 +158,8 @@ async def memcache_as(cfg, tmpdata, last_update):
     def memcache():
         # Get the data, don't care about race conditions.
         data = jsondumps((tmpdata, last_update, datetime.now().isoformat()))
-        m1.set("remote_sh", data)
-        m2.set("remote_sh", data)
+        m1.set(DEV_NAME, data)
+        m2.set(DEV_NAME, data)
 
     while 1:
         await asyncio.sleep(10)
@@ -221,7 +238,7 @@ async def querydb(tmpdata: dict, new_values: dict):
                     tmplist.append((key, tmpdata[key].copy()))
             # Convert nt to a string. Overwrite the old variable since it won't be used until next loop.
             nt = nt.isoformat("T", "minutes")
-            async with dbconnect("/db/remote_sh.db") as db:
+            async with dbconnect(DB_FILEPATH) as db:
                 await db.execute(f"INSERT INTO Timestamp VALUES ('{nt}')")
                 for measurer, data in tmplist:
                     mkey = measurer.partition("/")[0]

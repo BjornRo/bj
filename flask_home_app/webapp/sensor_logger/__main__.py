@@ -10,6 +10,10 @@ import json
 from bmemcached import Client
 from configparser import ConfigParser
 from pathlib import Path
+from multiprocessing import Process
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
@@ -81,6 +85,7 @@ def main():
         ),
         daemon=True,
     ).start()
+    matplotlib_setup()
     schedule_setup(main_node_data, main_node_new_values, lock)
 
     # Poll tmpdata until all Nones are gone.
@@ -201,12 +206,53 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock)
                 for table, value in device_data.items():
                     cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {value})")
         db.commit()
+        cursor.execute(query)
+        data = cursor.fetchall()
         cursor.close()
+        Process(target=create_graphs_in_new_process, args=(data,)).start()
+
+    query = """SELECT t.time, ktemp, khumid, press, btemp, bhumid, brtemp
+FROM Timestamp t
+LEFT OUTER JOIN
+(SELECT time, temperature AS ktemp
+FROM Temperature
+WHERE measurer = 'kitchen') a ON t.time = a.time
+LEFT OUTER JOIN
+(SELECT time, humidity As khumid
+FROM Humidity
+WHERE measurer = 'kitchen') b ON t.time = b.time
+LEFT OUTER JOIN
+(SELECT time, airpressure AS press
+FROM Airpressure
+WHERE measurer = 'kitchen') c ON t.time = c.time
+LEFT OUTER JOIN
+(SELECT time, temperature AS btemp
+FROM Temperature
+WHERE measurer = 'balcony') d ON t.time = d.time
+LEFT OUTER JOIN
+(SELECT time, humidity As bhumid
+FROM Humidity
+WHERE measurer = 'balcony') e ON t.time = e.time
+LEFT OUTER JOIN
+(SELECT time, temperature AS brtemp
+FROM Temperature
+WHERE measurer = 'bikeroom') f ON t.time = f.time"""
 
     # Due to the almost non-existing concurrency, just keep conn alive.
     db = sqlite3.connect("/db/main_db.db")
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
+
+def matplotlib_setup():
+    ...
+
+def create_graphs_in_new_process(data):
+    col = ("date", "ktemp", "khumid", "pressure", "btemp", "bhumid", "brtemp")
+    df = pd.DataFrame(data, columns=col)
+    df["date"] = pd.to_datetime(df["date"])  # format="%Y-%m-%dT%H:%M" isoformat already
+    plt.plot(df["date"][-48 * 21 :], df["brtemp"][-48 * 21 :])
+    plt.plot(df["date"][-48 * 21 :], df["pressure"][-48 * 21 :] - 1000)
+    plt.show()
 
 
 def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock: Lock):
