@@ -119,18 +119,18 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
                 if "file" == rel_url[1]:
                     if update_data(1, last_request):
                         async with async_open(DB_FILEPATH, "rb") as f:
-                            data = await f.read()
-                            source = BytesIO(initial_bytes=data)
+                            source = BytesIO(await f.read())
                         tardb = BytesIO()
                         with tarfile.open(fileobj=tardb, mode="w:gz") as tar:
                             info = tarfile.TarInfo(DB_FILE)
-                            info.size = len(data)
+                            info.size = source.seek(0,2)
+                            source.seek(0)
                             tar.addfile(info, source)
                         last_data[1] = tardb.getvalue()
                     return web.Response(
                         body=last_data[1],
                         content_type="application/octet-stream",
-                        headers={"content-disposition": f'attachment; filename="{DEV_NAME}.tar.gz"'},
+                        headers={"Content-Disposition": f'attachment; filename={DEV_NAME}.tar.gz'},
                     )
         except:
             pass
