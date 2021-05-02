@@ -24,6 +24,7 @@ DEV_NAME = "remote_sh"
 DB_FILE = f"{DEV_NAME}.db"
 DB_FILEPATH = "/db/" + DB_FILE
 
+
 def main():
     cfg = ConfigParser()
     cfg.read(Path(__file__).parent.absolute() / "config.ini")
@@ -123,14 +124,14 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
                         tardb = BytesIO()
                         with tarfile.open(fileobj=tardb, mode="w:gz") as tar:
                             info = tarfile.TarInfo(DB_FILE)
-                            info.size = source.seek(0,2)
+                            info.size = source.seek(0, 2)
                             source.seek(0)
                             tar.addfile(info, source)
                         last_data[1] = tardb.getvalue()
                     return web.Response(
                         body=last_data[1],
                         content_type="application/octet-stream",
-                        headers={"Content-Disposition": f'attachment; filename={DEV_NAME}.tar.gz'},
+                        headers={"Content-Disposition": f"attachment; filename={DEV_NAME}.tar.gz"},
                     )
         except:
             pass
