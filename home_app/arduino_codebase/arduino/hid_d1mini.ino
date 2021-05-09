@@ -198,7 +198,7 @@ void check_buttons_then_decide() {
             // IF button is active, let it pass | Button click "cooldown". Using binary explicit is more verbose.
             // 1 << i + NBUTTONS == 0b10000 << i, in this case. Less cycles I suppose?
             if (button_pressed & (0b10000 << i) || millis() - button_start_click[i] >= BUTTON_TIMEOUT) {
-                // All off, no double click/delay.
+                // All off, no double click/delay. Skip the entire algorithm.
                 if (i == 0) {
                     mqtt.publish(PUBLISH_COMM, pin_command_on[i], false);
                 } else {
