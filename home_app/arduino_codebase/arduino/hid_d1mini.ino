@@ -22,7 +22,7 @@ const char* SUBS[] = {SUB_BALC, SUB_BIKE};
 #define POLLRATE 350
 #define UPDATE_TIME 4000
 
-#define BUTTON_TIMEOUT 1500
+#define BUTTON_TIMEOUT 1000
 #define BUTTON_DECISION_INTERVAL 750
 unsigned long scheduler_timer, last_poll_time, lcd_timer, saved_time;
 
@@ -171,8 +171,7 @@ void msg_from_broker(char* topic, uint8_t* payload, unsigned int payload_length)
 
 // Function to read button and Debounce it. Async version.
 uint8_t button_counter[4];
-uint8_t button_pressed[4];
-unsigned long button_start_click[4];
+uint8_t button_pressed;  // 0b#0(0000) #1(0000), #0 = "Active", #1 = "If buttons been pressed"
 void checkButtons() {
     for (uint8_t i = 0; i < NBUTTONS; i++) {
         if (digitalRead(pin_list[i]) == 0) {
@@ -184,34 +183,36 @@ void checkButtons() {
         }
         // After 10 loops of button stabilizing, set button to true. "Sensitivity".
         if (button_counter[i] == 10) {
-            button_pressed[i] = 1;
+            button_pressed |= (1 << i);
         }
     }
 }
 
-uint8_t button_active[4];
-unsigned long button_timeout[4];
+// Works both as timeout and check for double click.
+unsigned long button_start_click[4];
 void check_buttons_then_decide() {
     checkButtons();
     for (uint8_t i = 0; i < NBUTTONS; i++) {
-        if (button_pressed[i] || button_active[i]) {
-            // Button click "cooldown"
-            if (millis() - button_timeout[i] >= BUTTON_TIMEOUT) {
-                // All off, no double click/delay
+        // Check if button is pressed or active. -- old (1 << i) | (1 << i + NBUTTONS))
+        if (button_pressed & (0b10001 << i)) {
+            // IF button is active, let it pass | Button click "cooldown". Using binary explicit is more verbose.
+            // 1 << i + NBUTTONS == 0b10000 << i, in this case. Less cycles I suppose?
+            if (button_pressed & (0b10000 << i) || millis() - button_start_click[i] >= BUTTON_TIMEOUT) {
+                // All off, no double click/delay.
                 if (i == 0) {
                     mqtt.publish(PUBLISH_COMM, pin_command_on[i], false);
                 } else {
                     // If button isn't active, then set it to active, set pressed to 0 and store time.
                     // Continue loop since we want to recheck if button is pressed again or held.
-                    if (!button_active[i]) {
+                    if (!(button_pressed & (0b10000 << i))) {
                         button_start_click[i] = millis();
-                        button_active[i] = 1;
-                        button_pressed[i] = 0;
+                        // Set active bit to 1. Set pressed bit to 0
+                        button_pressed = (button_pressed | (0b10000 << i)) & ~(1 << i) ;
                         continue;
                     }
                     // From this point on, button active has to be 1 or active.
                     // If button is pressed again, we know that it has to be a double click.
-                    if (button_pressed[i]) {
+                    if (button_pressed & (1 << i)) {
                         mqtt.publish(PUBLISH_COMM, pin_command_off[i], false);
                     } else if (millis() - button_start_click[i] >= BUTTON_DECISION_INTERVAL) {
                         // If timer for the button has passed, then we check the state of the pin.
@@ -227,11 +228,11 @@ void check_buttons_then_decide() {
                     }
                 }
                 // If a decision has been made, then timeout.
-                button_timeout[i] = millis();
+                button_start_click[i] = millis();
             }
             // Buttons will only reach this if button timeout or decision has been made.
-            button_pressed[i] = 0;
-            button_active[i] = 0;
+            // Set both i flags to 0.
+            button_pressed &= ~((1 << i) | (1 << i + NBUTTONS));
         }
     }
 }
