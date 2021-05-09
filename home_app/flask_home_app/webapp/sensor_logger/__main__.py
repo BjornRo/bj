@@ -243,8 +243,10 @@ WHERE measurer = 'bikeroom') f ON t.time = f.time"""
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
 
+
 def matplotlib_setup():
     ...
+
 
 def create_graphs_in_new_process(data):
     col = ("date", "ktemp", "khumid", "pressure", "btemp", "bhumid", "brtemp")

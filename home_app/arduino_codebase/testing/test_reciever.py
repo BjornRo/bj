@@ -3,7 +3,6 @@ import threading
 import queue
 from threading import Lock, Thread
 from typing import *
-import sys
 
 HEADER = 64
 PORT = 5050
