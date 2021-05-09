@@ -202,12 +202,12 @@ void check_buttons_then_decide() {
                 if (i == 0) {
                     mqtt.publish(PUBLISH_COMM, pin_command_on[i], false);
                 } else {
-                    // If button isn't active, then set it to active, set pressed to 0 and store time.
+                    // If button isn't active, then set it to 1, set pressed to 0 and store time.
                     // Continue loop since we want to recheck if button is pressed again or held.
                     if (!(button_pressed & (0b10000 << i))) {
                         button_start_click[i] = millis();
                         // Set active bit to 1. Set pressed bit to 0
-                        button_pressed = (button_pressed | (0b10000 << i)) & ~(1 << i) ;
+                        button_pressed = (button_pressed | (0b10000 << i)) & ~(1 << i);
                         continue;
                     }
                     // From this point on, button active has to be 1 or active.
@@ -241,16 +241,12 @@ void check_buttons_then_decide() {
 //const char* pin_command_off[] = {"ALLOFF", "(0,0,0)", "(1,0,0)", "(2,0,0)"};
 
 bool ultrasonic_polling() {
-    if (millis() - last_poll_time >= POLLRATE) {
-        digitalWrite(trig_pin, LOW);
-        delayMicroseconds(2);
-        digitalWrite(trig_pin, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(trig_pin, LOW);
-        last_poll_time = millis();
-        return LCD_ON_DISTANCE_CM >= (pulseIn(echo_pin, HIGH) / 58.2);
-    }
-    return false;
+    digitalWrite(trig_pin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trig_pin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig_pin, LOW);
+    return LCD_ON_DISTANCE_CM >= (pulseIn(echo_pin, HIGH) / 58.2);
 }
 
 void lcd_backlight(bool ultrasound) {
@@ -321,7 +317,10 @@ void loop() {
     mqtt.loop();
     check_buttons_then_decide();
 
-    lcd_backlight(ultrasonic_polling());
+    if (millis() - last_poll_time >= POLLRATE) {
+        last_poll_time = millis();
+        lcd_backlight(ultrasonic_polling());
+    }
 
     if (millis() - scheduler_timer >= UPDATE_TIME) {
         scheduler_timer = millis();
