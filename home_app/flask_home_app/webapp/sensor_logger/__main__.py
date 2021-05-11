@@ -12,10 +12,10 @@ from configparser import ConfigParser
 from pathlib import Path
 import socket
 
-from multiprocessing import Process
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+#from multiprocessing import Process
+#import pandas as pd
+#import numpy as np
+#import matplotlib.pyplot as plt
 
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
@@ -254,10 +254,10 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock)
                 for table, value in device_data.items():
                     cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {value})")
         db.commit()
-        cursor.execute(query)
-        data = cursor.fetchall()
+        #cursor.execute(query)
+        #data = cursor.fetchall()
         cursor.close()
-        Process(target=create_graphs_in_new_process, args=(data,)).start()
+        #Process(target=create_graphs_in_new_process, args=(data,)).start()
 
     query = """SELECT t.time, ktemp, khumid, press, btemp, bhumid, brtemp
 FROM Timestamp t
@@ -293,16 +293,16 @@ WHERE measurer = 'bikeroom') f ON t.time = f.time"""
 
 
 def matplotlib_setup():
-    ...
+    pass
 
 
-def create_graphs_in_new_process(data):
-    col = ("date", "ktemp", "khumid", "pressure", "btemp", "bhumid", "brtemp")
-    df = pd.DataFrame(data, columns=col)
-    df["date"] = pd.to_datetime(df["date"])  # format="%Y-%m-%dT%H:%M" isoformat already
-    plt.plot(df["date"][-48 * 21 :], df["brtemp"][-48 * 21 :])
-    plt.plot(df["date"][-48 * 21 :], df["pressure"][-48 * 21 :] - 1000)
-    plt.show()
+# def create_graphs_in_new_process(data):
+#     col = ("date", "ktemp", "khumid", "pressure", "btemp", "bhumid", "brtemp")
+#     df = pd.DataFrame(data, columns=col)
+#     df["date"] = pd.to_datetime(df["date"])  # format="%Y-%m-%dT%H:%M" isoformat already
+#     plt.plot(df["date"][-48 * 21 :], df["brtemp"][-48 * 21 :])
+#     plt.plot(df["date"][-48 * 21 :], df["pressure"][-48 * 21 :] - 1000)
+#     plt.show()
 
 
 def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock: Lock):
