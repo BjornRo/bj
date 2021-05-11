@@ -31,6 +31,8 @@ services:
         depends_on:
             - memcached
             - mqtt
+        expose:
+            - 9000
 
     flask:
         container_name: flask
@@ -38,6 +40,7 @@ services:
         build: ./flask
         expose:
             - 8000
+            #- 9000
         command: gunicorn app.__init__:create_app() -w 4 -b 0.0.0.0:8000 #--max-requests 10
         environment:
             - TZ=Europe/Stockholm

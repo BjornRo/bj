@@ -10,6 +10,8 @@ import json
 from bmemcached import Client
 from configparser import ConfigParser
 from pathlib import Path
+import socket
+
 from multiprocessing import Process
 import pandas as pd
 import numpy as np
@@ -85,6 +87,11 @@ def main():
         ),
         daemon=True,
     ).start()
+    Thread(
+        target=data_socket,
+        args=(9000, main_node_data, main_node_new_values),
+        daemon=True,
+    ).start()
     matplotlib_setup()
     schedule_setup(main_node_data, main_node_new_values, lock)
 
@@ -100,6 +107,47 @@ def main():
     while 1:
         schedule.run_pending()
         sleep(10)
+
+
+def data_socket(main_node_data, main_node_new_values, port=9000):
+    timestamps = {
+        sub_node: {dev: datetime.now() for dev in sub_node_data}
+        for sub_node, sub_node_data in main_node_data.items()
+        if sub_node != "home"
+    }
+    keys = ("Temperature", "Humidity", "Airpressure")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("0.0.0.0", port))
+    sock.listen(10)
+    while 1:
+        csock, _ = sock.accept()
+        with csock:
+            csock.settimeout(1)
+            try:
+                # [key, {device_key{measurement_key: data}} or {device_key: [data]}, {device_key: time}]
+                # data should have same keys as times.
+                key, data, times = json.loads(csock.recv(2048).decode("utf-8"))
+                if len(data) != len(times):
+                    continue
+
+                for device_key, time in times.items():
+                    if isinstance(data[device_key], dict):
+                        if main_node_data[key][device_key].keys() != data[device_key].keys():
+                            continue
+                        data_gen = data[device_key].items()
+                    elif isinstance(data[device_key], list):
+                        if len(main_node_data[key][device_key]) != len(data[device_key]):
+                            continue
+                        data_gen = zip(keys, data[device_key])
+
+                    dt_time = datetime.fromisoformat(time)
+                    if timestamps[key][device_key] < dt_time:
+                        for data_key, value in data_gen:
+                            main_node_data[key][device_key][data_key] = value
+                            timestamps[key][device_key] = dt_time
+                            main_node_new_values[key][device_key] = True
+            except:
+                pass
 
 
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock, cfg):
@@ -180,11 +228,11 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
 def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock):
     def querydb():
         # Check if there exist any values that should be queried. To reduce as much time with lock.
-        update_node = []
-        for sub_node, new_values in main_node_new_values.items():
-            if any(new_values.values()):
-                update_node.append(sub_node)
-
+        # update_node = []
+        # for sub_node, new_values in main_node_new_values.items():
+        #     if any(new_values.values()):
+        #         update_node.append(sub_node)
+        update_node = [s_node for s_node, nv in main_node_new_values.items() if any(nv.values())]
         if not update_node:
             return
 

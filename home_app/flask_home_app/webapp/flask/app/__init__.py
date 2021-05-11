@@ -46,16 +46,18 @@ def create_app():
     with app.app_context():
         db.session.execute("PRAGMA foreign_keys=on")
 
-    from .views import views
+    #from .views import views
 
     # from .auth import auth
-    from .datavisualizer import datavisualizer
-    from .booking import booking
+    from . import datavisualizer, booking, data, views
+    #from .booking import booking
+    #from .data import data
 
     app.register_blueprint(views, url_prefix="/")
     # app.register_blueprint(auth, url_prefix="/")
     app.register_blueprint(booking, url_prefix="/booking")
     app.register_blueprint(datavisualizer, url_prefix="/dataviz")
+    app.register_blueprint(data, url_prefix="/data")
 
     @app.route("/favicon.ico")
     def favicon():

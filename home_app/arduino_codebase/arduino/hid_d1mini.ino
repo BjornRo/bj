@@ -232,7 +232,7 @@ void check_buttons_then_decide() {
             }
             // Buttons will only reach this if button timeout or decision has been made.
             // Set both i flags to 0.
-            button_pressed &= ~((1 << i) | (1 << i + NBUTTONS));
+            button_pressed &= ~(0b10001 << i); //(1 << i) | (1 << i + NBUTTONS)
         }
     }
 }
