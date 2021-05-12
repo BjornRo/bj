@@ -5,6 +5,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from bmemcached import Client as mClient
 from time import sleep
+from textwrap import dedent
 
 # from jsonpickle import encode as jpencode
 # from zlib import compress
@@ -20,18 +21,50 @@ from aiohttp import web
 
 # Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
 
+DB_COLUMNS = ("time", "htemp", "humid", "press", "ptemp")
+DB_QUERY = dedent(
+    """\
+    SELECT t.time, htemp, humid, press, ptemp
+    FROM Timestamp t
+    LEFT OUTER JOIN
+    (SELECT time, temperature AS htemp
+    FROM Temperature
+    WHERE measurer = 'hydrofor') a ON t.time = a.time
+    LEFT OUTER JOIN
+    (SELECT time, humidity As humid
+    FROM Humidity
+    WHERE measurer = 'hydrofor') b ON t.time = b.time
+    LEFT OUTER JOIN
+    (SELECT time, airpressure AS press
+    FROM Airpressure
+    WHERE measurer = 'hydrofor') c ON t.time = c.time
+    LEFT OUTER JOIN
+    (SELECT time, temperature AS ptemp
+    FROM Temperature
+    WHERE measurer = 'pizw') d ON t.time = d.time"""
+)
+
 DEV_NAME = "remote_sh"
 DB_FILE = f"{DEV_NAME}.db"
 DB_FILEPATH = "/db/" + DB_FILE
 
+# Storing queried data, to stop too many IO queries.
+QUERY_DELTA_MIN = 30
+last_request = [datetime.now()] * 2
+last_data = ["null"] * 2
+
+# cfg
+CFG = ConfigParser()
+CFG.read(Path(__file__).parent.absolute() / "config.ini")
+
+# SSL Context
+SSLPATH = f'/etc/letsencrypt/live/{cfg["CERT"]["url"]}/'
+SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
+ssl = SSLContext(PROTOCOL_TLSv1_2)
+ssl.load_cert_chain(*SSLPATH_TUPLE)
+
 
 def main():
-    cfg = ConfigParser()
-    cfg.read(Path(__file__).parent.absolute() / "config.ini")
-
-    # SSL Context
-    sslpath = f'/etc/letsencrypt/live/{cfg["CERT"]["url"]}/'
-
     # Defined read only global variables
     # Find the device file to read from.
     file_addr = glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
@@ -56,11 +89,12 @@ def main():
         # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         try:
             loop = asyncio.get_event_loop()
+            loop.create_task(reload_ssl())
             loop.create_task(mqtt_agent(sub_denylist, tmpdata, new_values, last_update))
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
-            loop.create_task(memcache_as(cfg, tmpdata, last_update))
-            loop.create_task(low_lvl_http((tmpdata, last_update), cfg["GETDATA"]["token"], sslpath))
+            loop.create_task(memcache_as(tmpdata, last_update))
+            loop.create_task(low_lvl_http((tmpdata, last_update), CFG["GETDATA"]["token"]))
             loop.run_forever()
         finally:
             try:
@@ -73,37 +107,7 @@ def main():
 
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
-async def low_lvl_http(tmpdata_last_update, token, sslpath=None):
-    query = """SELECT t.time, htemp, humid, press, ptemp
-FROM Timestamp t
-LEFT OUTER JOIN
-(SELECT time, temperature AS htemp
-FROM Temperature
-WHERE measurer = 'hydrofor') a ON t.time = a.time
-LEFT OUTER JOIN
-(SELECT time, humidity As humid
-FROM Humidity
-WHERE measurer = 'hydrofor') b ON t.time = b.time
-LEFT OUTER JOIN
-(SELECT time, airpressure AS press
-FROM Airpressure
-WHERE measurer = 'hydrofor') c ON t.time = c.time
-LEFT OUTER JOIN
-(SELECT time, temperature AS ptemp
-FROM Temperature
-WHERE measurer = 'pizw') d ON t.time = d.time"""
-
-    last_request = [datetime.now()] * 2
-    last_data = ["null"] * 2
-    columns = ("time", "htemp", "humid", "press", "ptemp")
-
-    # Adds 30 min to "cache" the data.
-    def update_data(method_idx: int, request_time: list, delta: int = 30) -> bool:
-        time_now = datetime.now()
-        if boolean := request_time[method_idx] < time_now:
-            request_time[method_idx] = time_now + timedelta(minutes=delta)
-        return boolean
-
+async def low_lvl_http(tmpdata_last_update, token):
     async def handler(request: web.Request):
         try:
             rel_url = str(request.rel_url)[1:].split("/")
@@ -112,24 +116,10 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
             # Can't decide on query vs sending the file. Just have both ready for usage.
             if token == rel_url[0]:
                 if "query" == rel_url[1]:
-                    if update_data(0, last_request):
-                        async with dbconnect(DB_FILEPATH) as db:
-                            async with db.execute(query) as c:
-                                last_data[0] = jsondumps((columns, await c.fetchall()))
-                    return web.Response(text=last_data[0])
+                    return web.Response(text=await get_data_selector("Q"))
                 if "file" == rel_url[1]:
-                    if update_data(1, last_request):
-                        async with async_open(DB_FILEPATH, "rb") as f:
-                            source = BytesIO(await f.read())
-                        tardb = BytesIO()
-                        with tarfile.open(fileobj=tardb, mode="w:gz") as tar:
-                            info = tarfile.TarInfo(DB_FILE)
-                            info.size = source.seek(0, 2)
-                            source.seek(0)
-                            tar.addfile(info, source)
-                        last_data[1] = tardb.getvalue()
                     return web.Response(
-                        body=last_data[1],
+                        body=await get_data_selector("F"),
                         content_type="application/octet-stream",
                         headers={"Content-Disposition": f"attachment; filename={DEV_NAME}.tar.gz"},
                     )
@@ -137,24 +127,63 @@ WHERE measurer = 'pizw') d ON t.time = d.time"""
             pass
         return web.Response(status=500)
 
-    sslpath_tuple = (sslpath + "fullchain.pem", sslpath + "privkey.pem")
-    ssl = SSLContext(PROTOCOL_TLSv1_2)
-    ssl.load_cert_chain(*sslpath_tuple)
-
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
     site = web.TCPSite(runner, None, 42660, ssl_context=ssl)
     await site.start()
-    # Reload ssl every day.
+
+
+async def reload_ssl(seconds=86400):
     while 1:
-        await asyncio.sleep(86400)
-        ssl.load_cert_chain(*sslpath_tuple)
+        await asyncio.sleep(seconds)
+        ssl.load_cert_chain(*SSLPATH_TUPLE)
 
 
-async def memcache_as(cfg, tmpdata, last_update):
+async def get_data_selector(method_name: str):
+    if method_name == "Q":
+        return await get_update_data(0, get_filebytes, DB_FILEPATH)
+    if method_name == "F":
+        return await get_update_data(1, get_db_data)
+    return None
+
+
+async def get_update_data(index, f, *args):
+    time_now = datetime.now()
+    if last_request[index] < time_now:
+        last_request[index] = time_now + timedelta(minutes=QUERY_DELTA_MIN)
+        last_data[index] = await f(*args)
+    return last_data[index]
+
+
+# def update_data(index):
+#     time_now = datetime.now()
+#     if boolean := last_request[index] < time_now:
+#         last_request[index] = time_now + timedelta(minutes=QUERY_DELTA_MIN)
+#     return boolean
+
+
+async def get_db_data():
+    async with dbconnect(DB_FILEPATH) as db:
+        async with db.execute(DB_QUERY) as c:
+            return jsondumps((DB_COLUMNS, await c.fetchall()))
+
+
+async def get_filebytes(filename):
+    async with async_open(filename, "rb") as f:
+        source = BytesIO(await f.read())
+    tardb = BytesIO()
+    with tarfile.open(fileobj=tardb, mode="w:gz") as tar:
+        info = tarfile.TarInfo(filename)
+        info.size = source.seek(0, 2)
+        source.seek(0)
+        tar.addfile(info, source)
+    return tardb.getvalue()
+
+
+async def memcache_as(tmpdata, last_update):
     loop = asyncio.get_event_loop()
-    m1 = mClient((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
-    m2 = mClient((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
+    m1 = mClient((CFG["DATA"]["server"],), CFG["DATA"]["user"], CFG["DATA"]["pass"])
+    m2 = mClient((CFG["DATA2"]["server"],), CFG["DATA2"]["user"], CFG["DATA2"]["pass"])
 
     def memcache():
         # Get the data, don't care about race conditions.
