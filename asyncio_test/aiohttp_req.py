@@ -15,7 +15,8 @@ from aiohttp import web
 import json
 
 async def handler(request):
-    return web.json_response([1,2,3,4])
+    #return web.json_response([1,2,3,4])
+    return web.Response(status=401)
 
 
 async def main():

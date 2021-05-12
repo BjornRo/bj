@@ -57,7 +57,7 @@ last_data = ["null"] * 2
 # MISC
 UTF8 = "utf-8"
 
-#HTTP Server
+# HTTP Server
 H_PORT = 42660
 
 # Socket server
@@ -141,7 +141,7 @@ async def low_lvl_http(tmpdata_last_update):
                     )
         except:
             pass
-        return web.Response(status=500)
+        return web.Response(status=401)
 
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
@@ -157,11 +157,11 @@ async def socket_server(tmpdata_last_update):
                 await writer.drain()
                 command = await reader.read(COMMAND_LEN)
                 data = None
-                if command == b"S":
+                if b"S" == command:
                     data = jsondumps(tmpdata_last_update).encode(UTF8)
-                elif command == b"Q":
+                elif b"Q" == command:
                     data = (await get_data_selector("Q")).encode(UTF8)
-                elif command == b"F":
+                elif b"F" == command:
                     data = DB_FILE.encode(UTF8) + b"\n" + await get_data_selector("F")
                 if data is not None:
                     writer.write(data)
@@ -172,9 +172,11 @@ async def socket_server(tmpdata_last_update):
                 await writer.wait_closed()
             except:
                 pass
+
     srv = await asyncio.start_server(client_handle, None, S_PORT, ssl=ssl, ssl_handshake_timeout=2)
     async with srv:
         await srv.serve_forever()
+
 
 async def reload_ssl(seconds=86400):
     while 1:
@@ -183,9 +185,9 @@ async def reload_ssl(seconds=86400):
 
 
 async def get_data_selector(method_name: str):
-    if method_name == "F":
+    if "F" == method_name:
         return await get_update_data(0, get_filebytes, DB_FILEPATH)
-    if method_name == "Q":
+    if "Q" == method_name:
         return await get_update_data(1, get_db_data)
     return None
 
