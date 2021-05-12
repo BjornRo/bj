@@ -58,7 +58,7 @@ CFG = ConfigParser()
 CFG.read(Path(__file__).parent.absolute() / "config.ini")
 
 # SSL Context
-SSLPATH = f'/etc/letsencrypt/live/{cfg["CERT"]["url"]}/'
+SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
 ssl = SSLContext(PROTOCOL_TLSv1_2)
 ssl.load_cert_chain(*SSLPATH_TUPLE)
