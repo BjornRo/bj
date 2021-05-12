@@ -20,6 +20,7 @@ services:
             - mqtt
         ports:
             - 42660:42660
+            - 42661:42661
         privileged: true
 
     ddns:

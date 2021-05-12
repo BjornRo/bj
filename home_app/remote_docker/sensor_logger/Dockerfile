@@ -14,5 +14,5 @@ RUN echo "Europe/Stockholm" >  /etc/timezone
 
 #RUN mkdir -p /devices
 #RUN ln -s /devices /sys/bus/w1/devices/
-EXPOSE 42660
+
 CMD ["python3", "__main__.py"]

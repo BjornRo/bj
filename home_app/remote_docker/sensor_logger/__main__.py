@@ -21,6 +21,7 @@ from aiohttp import web
 
 # Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
 
+# File fetching and data requests
 DB_COLUMNS = ("time", "htemp", "humid", "press", "ptemp")
 DB_QUERY = dedent(
     """\
@@ -53,9 +54,23 @@ QUERY_DELTA_MIN = 30
 last_request = [datetime.now()] * 2
 last_data = ["null"] * 2
 
+# MISC
+UTF8 = "utf-8"
+
+#HTTP Server
+H_PORT = 42660
+
+# Socket server
+S_PORT = 42661
+
 # cfg
 CFG = ConfigParser()
 CFG.read(Path(__file__).parent.absolute() / "config.ini")
+
+# Security
+TOKEN = CFG["GETDATA"]["token"]
+BTOKEN = TOKEN.encode(UTF8)
+COMMAND_LEN = 1
 
 # SSL Context
 SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
@@ -94,7 +109,8 @@ def main():
             loop.create_task(read_temp(file_addr, tmpdata, new_values, "pizw/temp", last_update))
             loop.create_task(querydb(tmpdata, new_values))
             loop.create_task(memcache_as(tmpdata, last_update))
-            loop.create_task(low_lvl_http((tmpdata, last_update), CFG["GETDATA"]["token"]))
+            loop.create_task(low_lvl_http((tmpdata, last_update)))
+            loop.create_task(socket_server((tmpdata, last_update)))
             loop.run_forever()
         finally:
             try:
@@ -107,16 +123,16 @@ def main():
 
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.
-async def low_lvl_http(tmpdata_last_update, token):
+async def low_lvl_http(tmpdata_last_update):
     async def handler(request: web.Request):
         try:
             rel_url = str(request.rel_url)[1:].split("/")
             if "status" == rel_url[0] and "get" == rel_url[1]:
                 return web.json_response(tmpdata_last_update)
             # Can't decide on query vs sending the file. Just have both ready for usage.
-            if token == rel_url[0]:
+            if TOKEN == rel_url[0]:
                 if "query" == rel_url[1]:
-                    return web.Response(text=await get_data_selector("Q"))
+                    return web.json_response(await get_data_selector("Q"))
                 if "file" == rel_url[1]:
                     return web.Response(
                         body=await get_data_selector("F"),
@@ -129,9 +145,36 @@ async def low_lvl_http(tmpdata_last_update, token):
 
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
-    site = web.TCPSite(runner, None, 42660, ssl_context=ssl)
+    site = web.TCPSite(runner, None, H_PORT, ssl_context=ssl)
     await site.start()
 
+
+async def socket_server(tmpdata_last_update):
+    async def client_handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        try:
+            if BTOKEN == await asyncio.wait_for(reader.read(len(BTOKEN)), timeout=4):
+                writer.write(b"OK")
+                await writer.drain()
+                command = await reader.read(COMMAND_LEN)
+                data = None
+                if command == b"S":
+                    data = jsondumps(tmpdata_last_update).encode(UTF8)
+                elif command == b"Q":
+                    data = (await get_data_selector("Q")).encode(UTF8)
+                elif command == b"F":
+                    data = DB_FILE.encode(UTF8) + b"\n" + await get_data_selector("F")
+                if data is not None:
+                    writer.write(data)
+                    await writer.drain()
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except:
+                pass
+    srv = await asyncio.start_server(client_handle, None, S_PORT, ssl=ssl, ssl_handshake_timeout=2)
+    async with srv:
+        await srv.serve_forever()
 
 async def reload_ssl(seconds=86400):
     while 1:
@@ -140,9 +183,9 @@ async def reload_ssl(seconds=86400):
 
 
 async def get_data_selector(method_name: str):
-    if method_name == "Q":
-        return await get_update_data(0, get_filebytes, DB_FILEPATH)
     if method_name == "F":
+        return await get_update_data(0, get_filebytes, DB_FILEPATH)
+    if method_name == "Q":
         return await get_update_data(1, get_db_data)
     return None
 
