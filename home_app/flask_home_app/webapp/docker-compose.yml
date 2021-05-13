@@ -12,7 +12,6 @@ services:
         container_name: memcached
         image: memcached:alpine
         restart: always
-        #command: ["memcached"]
 
     ddns:
         container_name: ddns
@@ -33,16 +32,13 @@ services:
         depends_on:
             - memcached
             - mqtt
-        #expose:
-        #    - 9000
+        ports:
+            - 42661:42661
 
     flask:
         container_name: flask
         restart: always
         build: ./flask
-        #expose:
-            #- 8000
-            #- 9000
         command: gunicorn app.__init__:create_app() -w 4 -b 0.0.0.0:8000 #--max-requests 10
         environment:
             - TZ=Europe/Stockholm
@@ -69,8 +65,6 @@ services:
         image: certbot/certbot:arm32v6-latest
         container_name: certbot
         restart: always
-        ports:
-            - 80:80
         volumes:
             - /home/pi/appdata/certbot/letsencrypt:/etc/letsencrypt
             - /home/pi/appdata/certbot/www:/var/www/certbot

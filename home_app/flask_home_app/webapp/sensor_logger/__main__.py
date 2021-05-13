@@ -15,11 +15,6 @@ import ssl
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
 
-file = r"C:\Users\bjorn\Documents\git_repos\doodle_repo\home_app\flask_home_app\webapp\sensor_logger\data.json"
-with open("data.json", "r") as f:
-    d = json.loads(f.read())
-
-
 # MISC
 UTF8 = "utf-8"
 
@@ -27,9 +22,7 @@ UTF8 = "utf-8"
 CFG = ConfigParser()
 CFG.read("config.ini")
 
-# Security
-TOKEN = CFG["GETDATA"]["token"]
-BTOKEN = TOKEN.encode(UTF8)
+# Socket info constants.
 COMMAND_LEN = 1
 DEV_NAME_LEN = 9
 
@@ -60,7 +53,7 @@ def main():
     }
 
     # Read data file. Adds the info for remote devices.
-    with open("data.json", "r") as f:
+    with open("remotedata.json", "r") as f:
         for mainkey, mainvalue in json.loads(f.read()).items():
             main_node_data[mainkey] = {}
             for key, value in mainvalue.items():
@@ -82,8 +75,8 @@ def main():
             return json.dumps(value), 2
 
     memcache_local = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=3)
-    memcache_local.set("weather_data_home", main_node_data["home"])
-    memcache_local.set("weather_data_remote_sh", main_node_data["remote_sh"])
+    for key in main_node_data.keys():
+        memcache_local.set("weather_data_" + key, main_node_data[key])
 
     # Lock to stop race conditions due to threading.
     lock = Lock()
@@ -97,23 +90,25 @@ def main():
         ),
         daemon=True,
     ).start()
-    Thread(
-        target=remote_fetcher,
-        args=(
-            main_node_data["remote_sh"],
-            main_node_new_values["remote_sh"],
-            memcache_local,
-            "remote_sh",
-            lock,
-        ),
-        daemon=True,
-    ).start()
+    # Thread(
+    #     target=remote_fetcher,
+    #     args=(
+    #         main_node_data["remote_sh"],
+    #         main_node_new_values["remote_sh"],
+    #         memcache_local,
+    #         "remote_sh",
+    #         lock,
+    #     ),
+    #     daemon=True,
+    # ).start()
     Thread(
         target=data_socket,
         args=(
             main_node_data,
             main_node_new_values,
             device_login,
+            memcache_local,
+            lock,
         ),
         daemon=True,
     ).start()
@@ -133,7 +128,7 @@ def main():
         sleep(10)
 
 
-def data_socket(main_node_data, main_node_new_values, device_login):
+def data_socket(main_node_data, main_node_new_values, device_login, memcache_local, lock):
     time_last_sent = {
         sub_node: {device: datetime.now() for device in sub_node_data}
         for sub_node, sub_node_data in main_node_data.items()
@@ -144,39 +139,50 @@ def data_socket(main_node_data, main_node_new_values, device_login):
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to finally force close clause in parent.
         try:
-            # Get device name
-            dev_name = client.recv(DEV_NAME_LEN).decode(UTF8)
-            if dev_name not in device_login:
+            # Get device name. Send devicename and password in one.
+            device_name = client.recv(DEV_NAME_LEN).decode(UTF8)
+            # Check if password is ok, else throw keyerror or return.
+            passw = device_login[device_name].encode(UTF8)
+            if client.recv(len(passw)) != passw:
                 return
-            # Get token, "password".
-            if client.recv(len(BTOKEN)) != BTOKEN:
-                return
+            # Notify that it is ok to send data now.
             client.send(b"OK")
-
-            client.send(b"OK")
-
-            key, data, times = json.loads(csock.recv(2048).decode("utf-8"))
-            if len(data) != len(times):
-                return
-
-            # [key, {device_key{measurement_key: data}} or {device_key: [data]}, {device_key: time}]
-            # data should have same keys as times.
-            for device_key, time in times.items():
-                if isinstance(data[device_key], dict):
-                    if main_node_data[key][device_key].keys() != data[device_key].keys():
-                        continue
-                    data_gen = data[device_key].items()
-                elif isinstance(data[device_key], list):
-                    if len(main_node_data[key][device_key]) != len(data[device_key]):
-                        continue
-                    data_gen = zip(keys, data[device_key])
-
+            # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
+            rawdata = client.recv(1024)
+            # Close client, we're done from here. Race which device closes first.
+            try:
+                client.close()
+            except:
+                pass
+            timedata = {}
+            for device_key, (time, data) in json.loads(rawdata.decode(UTF8)).items():
                 dt_time = datetime.fromisoformat(time)
-                if timestamps[key][device_key] < dt_time:
-                    for data_key, value in data_gen:
-                        main_node_data[key][device_key][data_key] = value
-                        timestamps[key][device_key] = dt_time
-                        main_node_new_values[key][device_key] = True
+                if time_last_sent[device_name][device_key] >= dt_time:
+                    continue
+                if isinstance(data, dict):
+                    if data.keys() != main_node_data[device_name][device_key].keys():
+                        continue
+                    data_generator = data.items()
+                elif isinstance(data, list):
+                    if len(data) != len(main_node_data[device_name][device_key]):
+                        continue
+                    data_generator = zip(keys, data)
+                else:
+                    # If data is not in iter_format.
+                    continue
+                tmpdata = {}
+                for data_key, value in data_generator:
+                    if not _test_value(data_key, value, 100):
+                        break
+                    tmpdata[data_key] = value
+                else:
+                    with lock:
+                        main_node_data[device_name][device_key].update(tmpdata)
+                        main_node_new_values[device_name][device_key] = True
+                    time_last_sent[device_name][device_key] = dt_time
+                    timedata[device_key] = time
+            memcache_local.set("weather_data_" + device_name + "_time", timedata)
+            memcache_local.set("weather_data_" + device_name, main_node_data[device_name])
         except:
             pass
 
@@ -187,7 +193,7 @@ def data_socket(main_node_data, main_node_new_values, device_login):
             while 1:
                 try:
                     client, _ = sslsrv.accept()
-                    client.settimeout(2)
+                    client.settimeout(1.5)
                     client_handler(client)
                 finally:
                     # Try force-close.
