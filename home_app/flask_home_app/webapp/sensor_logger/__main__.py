@@ -2,7 +2,7 @@ from ast import literal_eval
 import paho.mqtt.client as mqtt
 from datetime import datetime
 import sqlite3
-from threading import Thread, Lock
+from threading import Thread, Semaphore
 import schedule
 from time import sleep
 from pymemcache.client.base import PooledClient
@@ -27,7 +27,7 @@ COMMAND_LEN = 1
 DEV_NAME_LEN = 9
 
 # SSL Context
-HOSTNAME = {CFG["CERT"]["url"]}
+HOSTNAME = CFG["CERT"]["url"]
 SSLPATH = f"/etc/letsencrypt/live/{HOSTNAME}/"
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -79,8 +79,10 @@ def main():
     for key in main_node_data.keys():
         memcache_local.set("weather_data_" + key, main_node_data[key])
 
-    # Lock to stop race conditions due to threading.
-    lock = Lock()
+    # Semaphores to stop race conditions due to threading.
+    # Each node gets its "own" semaphore since the nodes don't interfere with eachother
+    # Before SQL Queries, all locks are acquired since this is a read/write situation.
+    lock = Semaphore(len(main_node_data))
     Thread(
         target=mqtt_agent,
         args=(
@@ -196,7 +198,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, memcache_loc
         with context.wrap_socket(srv, server_side=True) as sslsrv:
             while 1:
                 try:
-                    client, _ = sslsrv.accept()
+                    client = sslsrv.accept()[0]
                     # Spawn a new thread.
                     Thread(target=client_handler, args=(client,), daemon=True).start()
                 except:
@@ -278,7 +280,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
 
 
 # mqtt function does all the heavy lifting sorting out bad data.
-def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock):
+def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semaphore):
     db = sqlite3.connect("/db/main_db.db")
 
     def querydb():
@@ -289,13 +291,17 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock)
         # Copy data and set values to false.
         time_now = datetime.now().isoformat("T", "minutes")
         new_data = {}
-        with lock:
-            for sub_node in update_node:
-                new_data[sub_node] = []
-                for device, new_value in main_node_new_values[sub_node].items():
-                    if new_value:
-                        main_node_new_values[sub_node][device] = False
-                        new_data[sub_node].append((device, main_node_data[sub_node][device].copy()))
+        # Acquire all semaphores
+        for _ in range(len(main_node_data)):
+            lock.acquire()
+        for sub_node in update_node:
+            new_data[sub_node] = []
+            for device, new_value in main_node_new_values[sub_node].items():
+                if new_value:
+                    main_node_new_values[sub_node][device] = False
+                    new_data[sub_node].append((device, main_node_data[sub_node][device].copy()))
+        # Release all semaphores when done.
+        lock.release(len(main_node_data))
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
         for sub_node_data in new_data.values():
@@ -315,7 +321,7 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock)
     schedule.every().day.at("23:45").do(reload_ssl)
 
 
-def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock: Lock):
+def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
     def on_connect(client, *_):
         for topic in list(h_tmpdata.keys()) + [status_path]:
             client.subscribe("home/" + topic)

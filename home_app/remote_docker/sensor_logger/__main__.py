@@ -195,7 +195,7 @@ async def socket_server(tmpdata_last_update):
             if BTOKEN == await asyncio.wait_for(reader.read(len(BTOKEN)), timeout=4):
                 writer.write(b"OK")
                 await writer.drain()
-                command = await reader.read(COMMAND_LEN)
+                command = await asyncio.wait_for(reader.read(COMMAND_LEN), timeout=4)
                 data = None
                 if b"S" == command:
                     data = jsondumps(tmpdata_last_update).encode(UTF8)
