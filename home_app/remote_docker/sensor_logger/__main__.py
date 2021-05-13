@@ -136,7 +136,7 @@ async def socket_send_data(tmpdata, last_update):
             await writer.drain()
             # If server doesn't reply with ok something has gone wrong. Otherwise just loop until
             # connection fails. Then an exception is thrown and function terminates.
-            result = b"OK" == await asyncio.wait_for(reader.read(OK), timeout=10)
+            result = await asyncio.wait_for(reader.read(OK), timeout=10) == b"OK"
             while result:
                 payload = {dev: (last_update[dev], val) for dev, val in tmpdata.items()}
                 writer.write(jsondumps(payload).encode(UTF8))
@@ -197,11 +197,11 @@ async def socket_server(tmpdata_last_update):
                 await writer.drain()
                 command = await asyncio.wait_for(reader.read(COMMAND_LEN), timeout=4)
                 data = None
-                if b"S" == command:
+                if command == b"S":
                     data = jsondumps(tmpdata_last_update).encode(UTF8)
-                elif b"Q" == command:
+                elif command == b"Q":
                     data = (await get_data_selector("Q")).encode(UTF8)
-                elif b"F" == command:
+                elif command == b"F":
                     data = DB_FILE.encode(UTF8) + b"\n" + await get_data_selector("F")
                 if data is not None:
                     writer.write(data)
@@ -225,9 +225,9 @@ async def reload_ssl(seconds=86400):
 
 
 async def get_data_selector(method_name: str):
-    if "F" == method_name:
+    if method_name == "F":
         return await get_update_data(0, get_filebytes, DB_FILEPATH)
-    if "Q" == method_name:
+    if method_name == "Q":
         return await get_update_data(1, get_db_data)
     return None
 
@@ -317,7 +317,7 @@ async def mqtt_agent(sub_denylist, tmpdata, new_values, last_update):
 
     while 1:
         try:
-            async with Client("192.168.1.200") as client:
+            async with Client("mqtt") as client:
                 for topic in tmpdata:
                     if topic not in sub_denylist:
                         await client.subscribe("landet/" + topic)

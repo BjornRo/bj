@@ -156,8 +156,13 @@ def data_socket(main_node_data, main_node_new_values, device_login, memcache_loc
             # exception is thrown and the while loop exits, and thread is destroyed.
             while 1:
                 # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
-                payload = json.loads(client.recv(512).decode(UTF8))
+                data = client.recv(512)
+                # If data is empty, client disconnected.
+                if not data:
+                    break
+                payload = json.loads(data.decode(UTF8))
                 timedata = {}
+                # Will throw exception if payload isn't a dict.
                 for device_key, (time, data) in payload.items():
                     dt_time = datetime.fromisoformat(time)
                     if time_last_sent[device_name][device_key] >= dt_time:
@@ -366,7 +371,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
     client.on_message = on_message
     while True:
         try:
-            if client.connect("www.home", 1883, 60) == 0:
+            if client.connect("mqtt", 1883, 60) == 0:
                 break
         except:
             pass
