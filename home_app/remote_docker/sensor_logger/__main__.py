@@ -10,7 +10,7 @@ from textwrap import dedent
 # from zlib import compress
 import tarfile
 from io import BytesIO
-from ssl import SSLContext, PROTOCOL_TLS
+import ssl
 
 import asyncio
 from asyncio_mqtt import Client
@@ -19,6 +19,21 @@ from aiofiles import open as async_open
 from aiohttp import web
 
 # Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
+
+# cfg
+CFG = ConfigParser()
+CFG.read("config.ini")
+
+
+# Storing queried data, to stop too many IO queries.
+QUERY_DELTA_MIN = 30
+last_request = [datetime.now()] * 2
+last_data = ["null"] * 2
+
+# MISC
+UTF8 = "utf-8"
+OK = 2
+MAIN_NODE_ADDR = CFG["MAIN"]["url"]
 
 # File fetching and data requests
 DB_COLUMNS = ("time", "htemp", "humid", "press", "ptemp")
@@ -44,17 +59,10 @@ DB_QUERY = dedent(
     WHERE measurer = 'pizw') d ON t.time = d.time"""
 )
 
-DEV_NAME = "remote_sh"
+DEV_NAME = CFG["DEVICE"]["name"]
+BDEV_NAME = DEV_NAME.encode(UTF8)
 DB_FILE = f"{DEV_NAME}.db"
 DB_FILEPATH = "/db/" + DB_FILE
-
-# Storing queried data, to stop too many IO queries.
-QUERY_DELTA_MIN = 30
-last_request = [datetime.now()] * 2
-last_data = ["null"] * 2
-
-# MISC
-UTF8 = "utf-8"
 
 # HTTP Server
 H_PORT = 42660
@@ -62,9 +70,6 @@ H_PORT = 42660
 # Socket server
 S_PORT = 42661
 
-# cfg
-CFG = ConfigParser()
-CFG.read("config.ini")
 
 # Security
 TOKEN = CFG["GETDATA"]["token"]
@@ -74,8 +79,9 @@ COMMAND_LEN = 1
 # SSL Context
 SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
-context = SSLContext(PROTOCOL_TLS)
+context = ssl.SSLContext(ssl.PROTOCOL_TLS)
 context.load_cert_chain(*SSLPATH_TUPLE)
+stdcontext = ssl.SSLContext(ssl.PROTOCOL_TLS)  # ssl.create_default_context()
 
 
 def main():
@@ -110,6 +116,7 @@ def main():
             loop.create_task(memcache_as(tmpdata, last_update))
             loop.create_task(low_lvl_http((tmpdata, last_update)))
             loop.create_task(socket_server((tmpdata, last_update)))
+            loop.create_task(socket_send_data(tmpdata, last_update))
             loop.run_forever()
         finally:
             try:
@@ -119,6 +126,40 @@ def main():
                 loop.close()
                 sleep(20)
                 asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+async def socket_send_data(tmpdata, last_update):
+    async def client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        try:
+            # Send credentials, login and token.
+            writer.write(BDEV_NAME + BTOKEN)
+            await writer.drain()
+            # If server doesn't reply with ok something has gone wrong. Otherwise just loop until
+            # connection fails. Then an exception is thrown and function terminates.
+            result = b"OK" == await asyncio.wait_for(reader.read(OK), timeout=10)
+            while result:
+                payload = {dev: (last_update[dev], val) for dev, val in tmpdata.items()}
+                writer.write(jsondumps(payload).encode(UTF8))
+                await writer.drain()
+                await asyncio.sleep(10)
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except:
+                pass
+
+    while 1:
+        try:
+            # Open connection
+            reader, writer = await asyncio.open_connection(
+                MAIN_NODE_ADDR, S_PORT, ssl_handshake_timeout=10, ssl=stdcontext
+            )
+            await client(reader, writer)
+        except:
+            pass
+        # If anything fails, cooldown and try to reconnect.
+        await asyncio.sleep(60)
 
 
 # Simple server to get data with HTTP. Trial to eventually replace memcachier.

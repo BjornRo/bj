@@ -27,7 +27,8 @@ COMMAND_LEN = 1
 DEV_NAME_LEN = 9
 
 # SSL Context
-SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
+HOSTNAME = {CFG["CERT"]["url"]}
+SSLPATH = f"/etc/letsencrypt/live/{HOSTNAME}/"
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(*SSLPATH_TUPLE)
@@ -139,68 +140,67 @@ def data_socket(main_node_data, main_node_new_values, device_login, memcache_loc
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to finally force close clause in parent.
         try:
+            client.settimeout(5)
             # Get device name. Send devicename and password in one.
             device_name = client.recv(DEV_NAME_LEN).decode(UTF8)
             # Check if password is ok, else throw keyerror or return.
             passw = device_login[device_name].encode(UTF8)
             if client.recv(len(passw)) != passw:
                 return
-            # Notify that it is ok to send data now.
+            # Notify that it is ok to send data now. Change timeout to keep connection alive.
+            client.settimeout(60)
             client.send(b"OK")
-            # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
-            rawdata = client.recv(1024)
-            # Close client, we're done from here. Race which device closes first.
+            # While connection is alive, send data. If connection is lost, then an
+            # exception is thrown and the while loop exits, and thread is destroyed.
+            while 1:
+                # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
+                payload = json.loads(client.recv(512).decode(UTF8))
+                timedata = {}
+                for device_key, (time, data) in payload.items():
+                    dt_time = datetime.fromisoformat(time)
+                    if time_last_sent[device_name][device_key] >= dt_time:
+                        continue
+                    if isinstance(data, dict):
+                        if data.keys() != main_node_data[device_name][device_key].keys():
+                            continue
+                        data_generator = data.items()
+                    elif isinstance(data, list):
+                        if len(data) != len(main_node_data[device_name][device_key]):
+                            continue
+                        data_generator = zip(keys, data)
+                    else:
+                        # If data is not in iter_format.
+                        continue
+                    tmpdata = {}
+                    for data_key, value in data_generator:
+                        if not _test_value(data_key, value, 100):
+                            break
+                        tmpdata[data_key] = value
+                    else:
+                        with lock:
+                            main_node_data[device_name][device_key].update(tmpdata)
+                            main_node_new_values[device_name][device_key] = True
+                        time_last_sent[device_name][device_key] = dt_time
+                        timedata[device_key] = time
+                memcache_local.set("weather_data_" + device_name + "_time", timedata)
+                memcache_local.set("weather_data_" + device_name, main_node_data[device_name])
+        finally:
             try:
                 client.close()
             except:
                 pass
-            timedata = {}
-            for device_key, (time, data) in json.loads(rawdata.decode(UTF8)).items():
-                dt_time = datetime.fromisoformat(time)
-                if time_last_sent[device_name][device_key] >= dt_time:
-                    continue
-                if isinstance(data, dict):
-                    if data.keys() != main_node_data[device_name][device_key].keys():
-                        continue
-                    data_generator = data.items()
-                elif isinstance(data, list):
-                    if len(data) != len(main_node_data[device_name][device_key]):
-                        continue
-                    data_generator = zip(keys, data)
-                else:
-                    # If data is not in iter_format.
-                    continue
-                tmpdata = {}
-                for data_key, value in data_generator:
-                    if not _test_value(data_key, value, 100):
-                        break
-                    tmpdata[data_key] = value
-                else:
-                    with lock:
-                        main_node_data[device_name][device_key].update(tmpdata)
-                        main_node_new_values[device_name][device_key] = True
-                    time_last_sent[device_name][device_key] = dt_time
-                    timedata[device_key] = time
-            memcache_local.set("weather_data_" + device_name + "_time", timedata)
-            memcache_local.set("weather_data_" + device_name, main_node_data[device_name])
-        except:
-            pass
 
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         srv.bind(("", S_PORT))
-        srv.listen(5)
+        srv.listen(10)
         with context.wrap_socket(srv, server_side=True) as sslsrv:
             while 1:
                 try:
                     client, _ = sslsrv.accept()
-                    client.settimeout(1.5)
-                    client_handler(client)
-                finally:
-                    # Try force-close.
-                    try:
-                        client.close()
-                    except:
-                        pass
+                    # Spawn a new thread.
+                    Thread(target=client_handler, args=(client,), daemon=True).start()
+                except:
+                    pass
 
 
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
