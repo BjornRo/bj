@@ -17,6 +17,18 @@ import socket
 #import numpy as np
 #import matplotlib.pyplot as plt
 
+
+#TODO
+# Heavy refactorizing, IF I know that the remote memcache can be deleted. I don't like
+# having a 3rd party service as middle man. Local memcache is necessary for flask.
+#
+# Too convoluted. Some parts should probably go into new containers
+# Such as creating graphs etc. DB file can still be accessed from "anywhere".
+
+
+CFG = ConfigParser()
+CFG.read(Path(__file__).parent.absolute() / "config.ini")
+
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
 
@@ -50,8 +62,7 @@ def main():
         for sub_node, sub_node_data in main_node_data.items()
     }
 
-    cfg = ConfigParser()
-    cfg.read(Path(__file__).parent.absolute() / "config.ini")
+
     # Setup memcache.
     class JSerde(object):
         def serialize(self, key, value):
@@ -82,8 +93,7 @@ def main():
             main_node_new_values["remote_sh"],
             memcache_local,
             "remote_sh",
-            lock,
-            cfg,
+            lock
         ),
         daemon=True,
     ).start()
@@ -108,7 +118,9 @@ def main():
         schedule.run_pending()
         sleep(10)
 
-
+# TODO
+# Implement SSL Socket instead. This is mostly for "future" use for devices that is stuck
+# behind a firewall or similar. Dynamic IPv6 which makes the open ports apply for wrong ports if ip change.
 def data_socket(main_node_data, main_node_new_values, port=9000):
     timestamps = {
         sub_node: {dev: datetime.now() for dev in sub_node_data}
@@ -116,8 +128,8 @@ def data_socket(main_node_data, main_node_new_values, port=9000):
         if sub_node != "home"
     }
     keys = ("Temperature", "Humidity", "Airpressure")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("0.0.0.0", port))
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    sock.bind((None, port))
     sock.listen(10)
     while 1:
         csock, _ = sock.accept()
@@ -150,7 +162,7 @@ def data_socket(main_node_data, main_node_new_values, port=9000):
                 pass
 
 
-def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock, cfg):
+def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
     def test_compare_restore(value1, value2):
         # Get the latest value from two sources that may lag or timeout.. woohoo
         # Test every possibility...Try catch to reduce if statements.
@@ -176,8 +188,8 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
             pass
         return None
 
-    memcachier1 = Client((cfg["DATA"]["server"],), cfg["DATA"]["user"], cfg["DATA"]["pass"])
-    memcachier2 = Client((cfg["DATA2"]["server"],), cfg["DATA2"]["user"], cfg["DATA2"]["pass"])
+    memcachier1 = Client((CFG["DATA"]["server"],), CFG["DATA"]["user"], CFG["DATA"]["pass"])
+    memcachier2 = Client((CFG["DATA2"]["server"],), CFG["DATA2"]["user"], CFG["DATA2"]["pass"])
 
     count_error = 0
     last_update_remote = {key: datetime.now() for key in sub_node_data}
