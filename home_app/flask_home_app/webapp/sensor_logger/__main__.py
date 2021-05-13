@@ -9,33 +9,44 @@ from pymemcache.client.base import PooledClient
 import json
 from bmemcached import Client
 from configparser import ConfigParser
-from pathlib import Path
 import socket
-
-#from multiprocessing import Process
-#import pandas as pd
-#import numpy as np
-#import matplotlib.pyplot as plt
-
-
-#TODO
-# Heavy refactorizing, IF I know that the remote memcache can be deleted. I don't like
-# having a 3rd party service as middle man. Local memcache is necessary for flask.
-#
-# Too convoluted. Some parts should probably go into new containers
-# Such as creating graphs etc. DB file can still be accessed from "anywhere".
-
-
-CFG = ConfigParser()
-CFG.read(Path(__file__).parent.absolute() / "config.ini")
+import ssl
 
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
+
+file = r"C:\Users\bjorn\Documents\git_repos\doodle_repo\home_app\flask_home_app\webapp\sensor_logger\data.json"
+with open("data.json", "r") as f:
+    d = json.loads(f.read())
+
+
+# MISC
+UTF8 = "utf-8"
+
+# Config reader -- Path(__file__).parent.absolute() /
+CFG = ConfigParser()
+CFG.read("config.ini")
+
+# Security
+TOKEN = CFG["GETDATA"]["token"]
+BTOKEN = TOKEN.encode(UTF8)
+COMMAND_LEN = 1
+DEV_NAME_LEN = 9
+
+# SSL Context
+SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
+SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.load_cert_chain(*SSLPATH_TUPLE)
+
+# Socket setup
+S_PORT = 42661
 
 # Datastructure is in the form of:
 #  devicename/measurements: for each measurement type: value.
 # New value is a flag to know if value has been updated since last SQL-query. -> Each :00, :30
 def main():
+    device_login = {}
     main_node_data = {
         "home": {
             "bikeroom/temp": {"Temperature": -99},
@@ -46,15 +57,18 @@ def main():
                 "Airpressure": -99,
             },
         },
-        "remote_sh": {
-            "pizw/temp": {"Temperature": -99},
-            "hydrofor/temphumidpress": {
-                "Temperature": -99,
-                "Humidity": -99,
-                "Airpressure": -99,
-            },
-        },
     }
+
+    # Read data file. Adds the info for remote devices.
+    with open("data.json", "r") as f:
+        for mainkey, mainvalue in json.loads(f.read()).items():
+            main_node_data[mainkey] = {}
+            for key, value in mainvalue.items():
+                if key == "password":
+                    device_login[mainkey] = value
+                    continue
+                main_node_data[mainkey][key] = value
+
     # Associated dict to see if the values has been updated. This is to let remote nodes
     # just send data and then you can decide at the main node.
     main_node_new_values = {
@@ -62,15 +76,12 @@ def main():
         for sub_node, sub_node_data in main_node_data.items()
     }
 
-
-    # Setup memcache.
+    # Setup memcache and set initial values for memcached.
     class JSerde(object):
         def serialize(self, key, value):
             return json.dumps(value), 2
 
     memcache_local = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=3)
-
-    # Set initial values for memcached.
     memcache_local.set("weather_data_home", main_node_data["home"])
     memcache_local.set("weather_data_remote_sh", main_node_data["remote_sh"])
 
@@ -93,16 +104,19 @@ def main():
             main_node_new_values["remote_sh"],
             memcache_local,
             "remote_sh",
-            lock
+            lock,
         ),
         daemon=True,
     ).start()
     Thread(
         target=data_socket,
-        args=(9000, main_node_data, main_node_new_values),
+        args=(
+            main_node_data,
+            main_node_new_values,
+            device_login,
+        ),
         daemon=True,
     ).start()
-    matplotlib_setup()
     schedule_setup(main_node_data, main_node_new_values, lock)
 
     # Poll tmpdata until all Nones are gone.
@@ -118,48 +132,69 @@ def main():
         schedule.run_pending()
         sleep(10)
 
-# TODO
-# Implement SSL Socket instead. This is mostly for "future" use for devices that is stuck
-# behind a firewall or similar. Dynamic IPv6 which makes the open ports apply for wrong ports if ip change.
-def data_socket(main_node_data, main_node_new_values, port=9000):
-    timestamps = {
-        sub_node: {dev: datetime.now() for dev in sub_node_data}
+
+def data_socket(main_node_data, main_node_new_values, device_login):
+    time_last_sent = {
+        sub_node: {device: datetime.now() for device in sub_node_data}
         for sub_node, sub_node_data in main_node_data.items()
         if sub_node != "home"
     }
     keys = ("Temperature", "Humidity", "Airpressure")
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.bind((None, port))
-    sock.listen(10)
-    while 1:
-        csock, _ = sock.accept()
-        with csock:
-            csock.settimeout(1)
-            try:
-                # [key, {device_key{measurement_key: data}} or {device_key: [data]}, {device_key: time}]
-                # data should have same keys as times.
-                key, data, times = json.loads(csock.recv(2048).decode("utf-8"))
-                if len(data) != len(times):
-                    continue
 
-                for device_key, time in times.items():
-                    if isinstance(data[device_key], dict):
-                        if main_node_data[key][device_key].keys() != data[device_key].keys():
-                            continue
-                        data_gen = data[device_key].items()
-                    elif isinstance(data[device_key], list):
-                        if len(main_node_data[key][device_key]) != len(data[device_key]):
-                            continue
-                        data_gen = zip(keys, data[device_key])
+    def client_handler(client: ssl.SSLSocket):
+        # No need for contex-manager due to finally force close clause in parent.
+        try:
+            # Get device name
+            dev_name = client.recv(DEV_NAME_LEN).decode(UTF8)
+            if dev_name not in device_login:
+                return
+            # Get token, "password".
+            if client.recv(len(BTOKEN)) != BTOKEN:
+                return
+            client.send(b"OK")
 
-                    dt_time = datetime.fromisoformat(time)
-                    if timestamps[key][device_key] < dt_time:
-                        for data_key, value in data_gen:
-                            main_node_data[key][device_key][data_key] = value
-                            timestamps[key][device_key] = dt_time
-                            main_node_new_values[key][device_key] = True
-            except:
-                pass
+            client.send(b"OK")
+
+            key, data, times = json.loads(csock.recv(2048).decode("utf-8"))
+            if len(data) != len(times):
+                return
+
+            # [key, {device_key{measurement_key: data}} or {device_key: [data]}, {device_key: time}]
+            # data should have same keys as times.
+            for device_key, time in times.items():
+                if isinstance(data[device_key], dict):
+                    if main_node_data[key][device_key].keys() != data[device_key].keys():
+                        continue
+                    data_gen = data[device_key].items()
+                elif isinstance(data[device_key], list):
+                    if len(main_node_data[key][device_key]) != len(data[device_key]):
+                        continue
+                    data_gen = zip(keys, data[device_key])
+
+                dt_time = datetime.fromisoformat(time)
+                if timestamps[key][device_key] < dt_time:
+                    for data_key, value in data_gen:
+                        main_node_data[key][device_key][data_key] = value
+                        timestamps[key][device_key] = dt_time
+                        main_node_new_values[key][device_key] = True
+        except:
+            pass
+
+    with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
+        srv.bind(("", S_PORT))
+        srv.listen(5)
+        with context.wrap_socket(srv, server_side=True) as sslsrv:
+            while 1:
+                try:
+                    client, _ = sslsrv.accept()
+                    client.settimeout(2)
+                    client_handler(client)
+                finally:
+                    # Try force-close.
+                    try:
+                        client.close()
+                    except:
+                        pass
 
 
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
@@ -238,12 +273,9 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
 
 # mqtt function does all the heavy lifting sorting out bad data.
 def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock):
+    db = sqlite3.connect("/db/main_db.db")
+
     def querydb():
-        # Check if there exist any values that should be queried. To reduce as much time with lock.
-        # update_node = []
-        # for sub_node, new_values in main_node_new_values.items():
-        #     if any(new_values.values()):
-        #         update_node.append(sub_node)
         update_node = [s_node for s_node, nv in main_node_new_values.items() if any(nv.values())]
         if not update_node:
             return
@@ -266,55 +298,15 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Lock)
                 for table, value in device_data.items():
                     cursor.execute(f"INSERT INTO {table} VALUES ('{mkey}', '{time_now}', {value})")
         db.commit()
-        #cursor.execute(query)
-        #data = cursor.fetchall()
         cursor.close()
-        #Process(target=create_graphs_in_new_process, args=(data,)).start()
 
-    query = """SELECT t.time, ktemp, khumid, press, btemp, bhumid, brtemp
-FROM Timestamp t
-LEFT OUTER JOIN
-(SELECT time, temperature AS ktemp
-FROM Temperature
-WHERE measurer = 'kitchen') a ON t.time = a.time
-LEFT OUTER JOIN
-(SELECT time, humidity As khumid
-FROM Humidity
-WHERE measurer = 'kitchen') b ON t.time = b.time
-LEFT OUTER JOIN
-(SELECT time, airpressure AS press
-FROM Airpressure
-WHERE measurer = 'kitchen') c ON t.time = c.time
-LEFT OUTER JOIN
-(SELECT time, temperature AS btemp
-FROM Temperature
-WHERE measurer = 'balcony') d ON t.time = d.time
-LEFT OUTER JOIN
-(SELECT time, humidity As bhumid
-FROM Humidity
-WHERE measurer = 'balcony') e ON t.time = e.time
-LEFT OUTER JOIN
-(SELECT time, temperature AS brtemp
-FROM Temperature
-WHERE measurer = 'bikeroom') f ON t.time = f.time"""
+    def reload_ssl():
+        context.load_cert_chain(*SSLPATH_TUPLE)
 
     # Due to the almost non-existing concurrency, just keep conn alive.
-    db = sqlite3.connect("/db/main_db.db")
     schedule.every().hour.at(":30").do(querydb)
     schedule.every().hour.at(":00").do(querydb)
-
-
-def matplotlib_setup():
-    pass
-
-
-# def create_graphs_in_new_process(data):
-#     col = ("date", "ktemp", "khumid", "pressure", "btemp", "bhumid", "brtemp")
-#     df = pd.DataFrame(data, columns=col)
-#     df["date"] = pd.to_datetime(df["date"])  # format="%Y-%m-%dT%H:%M" isoformat already
-#     plt.plot(df["date"][-48 * 21 :], df["brtemp"][-48 * 21 :])
-#     plt.plot(df["date"][-48 * 21 :], df["pressure"][-48 * 21 :] - 1000)
-#     plt.show()
+    schedule.every().day.at("23:45").do(reload_ssl)
 
 
 def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock: Lock):

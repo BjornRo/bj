@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from json import dumps as jsondumps
 from glob import glob
 from configparser import ConfigParser
-from pathlib import Path
 from bmemcached import Client as mClient
 from time import sleep
 from textwrap import dedent
@@ -11,7 +10,7 @@ from textwrap import dedent
 # from zlib import compress
 import tarfile
 from io import BytesIO
-from ssl import SSLContext, PROTOCOL_TLSv1_2
+from ssl import SSLContext, PROTOCOL_TLS
 
 import asyncio
 from asyncio_mqtt import Client
@@ -65,7 +64,7 @@ S_PORT = 42661
 
 # cfg
 CFG = ConfigParser()
-CFG.read(Path(__file__).parent.absolute() / "config.ini")
+CFG.read("config.ini")
 
 # Security
 TOKEN = CFG["GETDATA"]["token"]
@@ -75,8 +74,8 @@ COMMAND_LEN = 1
 # SSL Context
 SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
-ssl = SSLContext(PROTOCOL_TLSv1_2)
-ssl.load_cert_chain(*SSLPATH_TUPLE)
+context = SSLContext(PROTOCOL_TLS)
+context.load_cert_chain(*SSLPATH_TUPLE)
 
 
 def main():
@@ -145,12 +144,12 @@ async def low_lvl_http(tmpdata_last_update):
 
     runner = web.ServerRunner(web.Server(handler))
     await runner.setup()
-    site = web.TCPSite(runner, None, H_PORT, ssl_context=ssl)
+    site = web.TCPSite(runner, None, H_PORT, ssl_context=context)
     await site.start()
 
 
 async def socket_server(tmpdata_last_update):
-    async def client_handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def c_handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             if BTOKEN == await asyncio.wait_for(reader.read(len(BTOKEN)), timeout=4):
                 writer.write(b"OK")
@@ -173,7 +172,7 @@ async def socket_server(tmpdata_last_update):
             except:
                 pass
 
-    srv = await asyncio.start_server(client_handle, None, S_PORT, ssl=ssl, ssl_handshake_timeout=2)
+    srv = await asyncio.start_server(c_handle, None, S_PORT, ssl=context, ssl_handshake_timeout=2)
     async with srv:
         await srv.serve_forever()
 
@@ -181,7 +180,7 @@ async def socket_server(tmpdata_last_update):
 async def reload_ssl(seconds=86400):
     while 1:
         await asyncio.sleep(seconds)
-        ssl.load_cert_chain(*SSLPATH_TUPLE)
+        context.load_cert_chain(*SSLPATH_TUPLE)
 
 
 async def get_data_selector(method_name: str):
