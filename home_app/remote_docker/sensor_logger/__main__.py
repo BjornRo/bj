@@ -61,7 +61,7 @@ DB_QUERY = dedent(
 
 DEV_NAME = CFG["DEVICE"]["name"]
 BDEV_NAME = DEV_NAME.encode(UTF8)
-DB_FILE = f"{DEV_NAME}.db"
+DB_FILE = DEV_NAME + ".db"
 DB_FILEPATH = "/db/" + DB_FILE
 
 # HTTP Server

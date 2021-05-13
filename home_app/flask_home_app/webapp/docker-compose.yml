@@ -68,4 +68,4 @@ services:
         volumes:
             - /home/pi/appdata/certbot/letsencrypt:/etc/letsencrypt
             - /home/pi/appdata/certbot/www:/var/www/certbot
-        entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew -n; sleep 12h & wait $${!}; done;'"
+        entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew -n --webroot --webroot-path /var/www/certbot; sleep 12h & wait $${!}; done;'"
