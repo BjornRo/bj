@@ -11,6 +11,7 @@ from bmemcached import Client
 from configparser import ConfigParser
 import socket
 import ssl
+import sys
 
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
@@ -194,6 +195,8 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 timedata = {k: v.isoformat() for k, v in time_last_update[device_name].items()}
                 mc_local.set("weather_data_" + device_name + "_time", timedata)
                 mc_local.set("weather_data_" + device_name, main_node_data[device_name])
+        except Exception as e:
+            print(e, file=sys.stderr)
         finally:
             try:
                 client.close()

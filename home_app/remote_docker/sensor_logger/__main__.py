@@ -118,10 +118,14 @@ def main():
             loop.create_task(socket_server((tmpdata, last_update)))
             loop.create_task(socket_send_data(tmpdata, last_update))
             loop.run_forever()
+        except:
+            pass
         finally:
             try:
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.run_until_complete(loop.shutdown_default_executor())
+            except:
+                pass
             finally:
                 loop.close()
                 sleep(20)
@@ -142,6 +146,8 @@ async def socket_send_data(tmpdata, last_update):
                 writer.write(jsondumps(payload).encode(UTF8))
                 await writer.drain()
                 await asyncio.sleep(10)
+        except:
+            pass
         finally:
             try:
                 writer.close()
@@ -204,6 +210,8 @@ async def socket_server(tmpdata_last_update):
                 if data is not None:
                     writer.write(data)
                     await writer.drain()
+        except:
+            pass
         finally:
             try:
                 writer.close()
