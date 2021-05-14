@@ -131,9 +131,9 @@ def main():
         sleep(10)
 
 
-def data_socket(main_node_data, main_node_new_values, device_login, memcache_local, lock):
-    time_last_sent = {
-        sub_node: {device: datetime.now() for device in sub_node_data}
+def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lock):
+    time_last_update = {
+        sub_node: {device: datetime.min for device in sub_node_data}
         for sub_node, sub_node_data in main_node_data.items()
         if sub_node != "home"
     }
@@ -161,11 +161,14 @@ def data_socket(main_node_data, main_node_new_values, device_login, memcache_loc
                 if not data:
                     break
                 payload = json.loads(data.decode(UTF8))
-                timedata = {}
                 # Will throw exception if payload isn't a dict.
                 for device_key, (time, data) in payload.items():
-                    dt_time = datetime.fromisoformat(time)
-                    if time_last_sent[device_name][device_key] >= dt_time:
+                    try:
+                        # Tests is time is valid.
+                        dt_time = datetime.fromisoformat(time)
+                    except:
+                        continue
+                    if time_last_update[device_name][device_key] >= dt_time:
                         continue
                     if isinstance(data, dict):
                         if data.keys() != main_node_data[device_name][device_key].keys():
@@ -187,10 +190,10 @@ def data_socket(main_node_data, main_node_new_values, device_login, memcache_loc
                         with lock:
                             main_node_data[device_name][device_key].update(tmpdata)
                             main_node_new_values[device_name][device_key] = True
-                        time_last_sent[device_name][device_key] = dt_time
-                        timedata[device_key] = time
-                memcache_local.set("weather_data_" + device_name + "_time", timedata)
-                memcache_local.set("weather_data_" + device_name, main_node_data[device_name])
+                        time_last_update[device_name][device_key] = dt_time
+                timedata = {k: v.isoformat() for k, v in time_last_update[device_name].items()}
+                mc_local.set("weather_data_" + device_name + "_time", timedata)
+                mc_local.set("weather_data_" + device_name, main_node_data[device_name])
         finally:
             try:
                 client.close()

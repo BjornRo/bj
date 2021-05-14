@@ -33,7 +33,7 @@ last_data = ["null"] * 2
 # MISC
 UTF8 = "utf-8"
 OK = 2
-MAIN_NODE_ADDR = CFG["MAIN"]["url"]
+MAIN_ADDR = CFG["MAIN"]["url"]
 
 # File fetching and data requests
 DB_COLUMNS = ("time", "htemp", "humid", "press", "ptemp")
@@ -81,7 +81,7 @@ SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
 context = ssl.SSLContext(ssl.PROTOCOL_TLS)
 context.load_cert_chain(*SSLPATH_TUPLE)
-stdcontext = ssl.SSLContext(ssl.PROTOCOL_TLS)  # ssl.create_default_context()
+stdssl = ssl.SSLContext(ssl.PROTOCOL_TLS)  # ssl.create_default_context()
 
 
 def main():
@@ -151,10 +151,8 @@ async def socket_send_data(tmpdata, last_update):
 
     while 1:
         try:
-            # Open connection
-            reader, writer = await asyncio.open_connection(
-                MAIN_NODE_ADDR, S_PORT, ssl_handshake_timeout=10, ssl=stdcontext
-            )
+            task = asyncio.open_connection(MAIN_ADDR, S_PORT, ssl_handshake_timeout=10, ssl=stdssl)
+            reader, writer = await asyncio.wait_for(task, timeout=10)
             await client(reader, writer)
         except:
             pass
