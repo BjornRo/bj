@@ -24,7 +24,6 @@ from aiohttp import web
 CFG = ConfigParser()
 CFG.read("config.ini")
 
-
 # Storing queried data, to stop too many IO queries.
 QUERY_DELTA_MIN = 30
 last_request = [datetime.now()] * 2

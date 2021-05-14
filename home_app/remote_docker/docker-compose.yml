@@ -1,12 +1,25 @@
 version: '3.9'
-
+# Run before ipv6
+# docker network create --ipv6 --subnet=fd00::/64 prodnet
 services:
+    ipv6nat:
+        container_name: ipv6nat
+        restart: always
+        image: robbertkl/ipv6nat:latest
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /lib/modules:/lib/modules:ro
+        privileged: true
+        network_mode: "host"
+
     mqtt:
         container_name: mqtt
         restart: always
         build: ./mqtt
         ports:
             - 1883:1883
+        networks:
+            - prodnet
 
     sensor_logger:
         container_name: sensor_logger
@@ -22,6 +35,8 @@ services:
             - 42660:42660
             - 42661:42661
         privileged: true
+        networks:
+            - prodnet
 
     ddns:
         container_name: ddns
@@ -39,3 +54,7 @@ services:
             - /home/pi/appdata/certbot/letsencrypt:/etc/letsencrypt
             - /home/pi/appdata/certbot/www:/var/www/certbot
         entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew -n ; sleep 24h & wait $${!}; done;'"
+
+networks:
+    prodnet:
+        external: true
