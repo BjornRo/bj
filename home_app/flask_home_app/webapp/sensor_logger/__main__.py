@@ -1,4 +1,5 @@
 from ast import literal_eval
+from home_app.remote_docker.sensor_logger.__main__ import TOKEN
 import paho.mqtt.client as mqtt
 from datetime import datetime
 import sqlite3
@@ -7,7 +8,7 @@ import schedule
 from time import sleep
 from pymemcache.client.base import PooledClient
 import json
-from bmemcached import Client
+#from bmemcached import Client
 from configparser import ConfigParser
 import socket
 import ssl
@@ -23,16 +24,19 @@ UTF8 = "utf-8"
 CFG = ConfigParser()
 CFG.read("config.ini")
 
-# Socket info constants.
-COMMAND_LEN = 1
-DEV_NAME_LEN = 9
-
 # SSL Context
 HOSTNAME = CFG["CERT"]["url"]
 SSLPATH = f"/etc/letsencrypt/live/{HOSTNAME}/"
 SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(*SSLPATH_TUPLE)
+
+# Token for an eventual use
+TOKEN = CFG["TOKEN"]["token"]
+
+# Socket info constants.
+COMMAND_LEN = 1
+DEV_NAME_LEN = int(CFG["TOKEN"]["dev_name_len"])
 
 # Socket setup
 S_PORT = 42661
@@ -41,28 +45,19 @@ S_PORT = 42661
 #  devicename/measurements: for each measurement type: value.
 # New value is a flag to know if value has been updated since last SQL-query. -> Each :00, :30
 def main():
-    device_login = {}
     main_node_data = {
         "home": {
             "bikeroom/temp": {"Temperature": -99},
             "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
-            "kitchen/temphumidpress": {
-                "Temperature": -99,
-                "Humidity": -99,
-                "Airpressure": -99,
-            },
-        },
+            "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
+        }
     }
-
+    device_login = {}
     # Read data file. Adds the info for remote devices.
     with open("remotedata.json", "r") as f:
         for mainkey, mainvalue in json.loads(f.read()).items():
-            main_node_data[mainkey] = {}
-            for key, value in mainvalue.items():
-                if key == "password":
-                    device_login[mainkey] = value
-                    continue
-                main_node_data[mainkey][key] = value
+            device_login[mainkey] = mainvalue.pop("password")
+            main_node_data[mainkey] = mainvalue
 
     # Associated dict to see if the values has been updated. This is to let remote nodes
     # just send data and then you can decide at the main node.
@@ -154,18 +149,18 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             client.settimeout(60)
             client.send(b"OK")
             # While connection is alive, send data. If connection is lost, then an
-            # exception is thrown and the while loop exits, and thread is destroyed.
+            # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
                 # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
-                data = client.recv(512)
+                recvdata = client.recv(512)
                 # If data is empty, client disconnected.
-                if not data:
+                if not recvdata:
                     break
-                payload = json.loads(data.decode(UTF8))
+                payload = json.loads(recvdata.decode(UTF8))
                 # Will throw exception if payload isn't a dict.
                 for device_key, (time, data) in payload.items():
                     try:
-                        # Tests is time is valid.
+                        # Test if time is valid.
                         dt_time = datetime.fromisoformat(time)
                     except:
                         continue
@@ -215,7 +210,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 except:
                     pass
 
-
+"""
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
     def test_compare_restore(value1, value2):
         # Get the latest value from two sources that may lag or timeout.. woohoo
@@ -288,7 +283,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
                     with lock:
                         sub_node_data[device].update(tmpdict)
                         sub_node_new_values[device] = True
-
+"""
 
 # mqtt function does all the heavy lifting sorting out bad data.
 def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semaphore):

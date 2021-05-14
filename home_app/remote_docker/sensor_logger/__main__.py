@@ -69,9 +69,8 @@ H_PORT = 42660
 # Socket server
 S_PORT = 42661
 
-
 # Security
-TOKEN = CFG["GETDATA"]["token"]
+TOKEN = CFG["DEVICE"]["token"]
 BTOKEN = TOKEN.encode(UTF8)
 COMMAND_LEN = 1
 
