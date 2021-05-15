@@ -3,7 +3,7 @@ from threading import Thread, Semaphore
 from datetime import datetime
 from time import sleep
 from pymemcache.client.base import PooledClient
-import bcrypt
+from bcrypt import checkpw
 
 import schedule
 import json
@@ -141,6 +141,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
         if sub_node != "home"
     }
     keys = ("Temperature", "Humidity", "Airpressure")
+    denylist = (b"getstatus",) # Might refactor into 'user' have allowed methods, (P,G..)
 
     def get_iterable(recvdata, maindata):
         if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
@@ -157,14 +158,16 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             device_name = client.recv(DEV_NAME_LEN).decode(UTF8)
             # Check if password is ok, else throw keyerror or return.
             passw = device_login[device_name]
-            if not bcrypt.checkpw(client.recv(64), passw):
+            if not checkpw(client.recv(64), passw):
                 return
             client.send(b"OK")
             # Decide what the client wants to do.
             recvdata = client.recv(COMMAND_LEN)
             if recvdata == b"G": # [G]ET
                 return client.sendall(json.dumps((main_node_data, time_last_update)).encode(UTF8))
-            elif recvdata == b"P": # [P]OST
+            if device_name in denylist:
+                return
+            if recvdata == b"P": # [P]OST
                 pass
             else:
                 return

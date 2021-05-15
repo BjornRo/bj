@@ -37,6 +37,7 @@ last_data = ["null"] * 2
 # MISC
 UTF8 = "utf-8"
 OK = 2
+COMMAND_LEN = 1
 MAIN_ADDR = CFG["MAIN"]["url"]
 
 # File fetching and data requests
@@ -77,7 +78,6 @@ S_PORT = 42661
 # Security
 TOKEN = CFG["DEVICE"]["token"]
 BTOKEN = TOKEN.encode(UTF8)
-COMMAND_LEN = 1
 
 # SSL Context
 SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
