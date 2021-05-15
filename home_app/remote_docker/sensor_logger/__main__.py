@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from json import dumps as jsondumps
+import json
 from glob import glob
 from configparser import ConfigParser
 from bmemcached import Client as mClient
@@ -17,6 +18,10 @@ from asyncio_mqtt import Client
 from aiosqlite import connect as dbconnect
 from aiofiles import open as async_open
 from aiohttp import web
+
+# Replace encoder to not use white space. Default to use isoformat for datetime =>
+#   Since I know the types I'm dumping. If needed custom encoder or an "actual" default function.
+json._default_encoder = json.JSONEncoder(separators=(',', ':'), default=lambda dt: dt.isoformat())
 
 # Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
 
@@ -138,6 +143,11 @@ async def socket_send_data(tmpdata, last_update):
             await writer.drain()
             # If server doesn't reply with ok something has gone wrong. Otherwise just loop until
             # connection fails. Then an exception is thrown and function terminates.
+            result = await asyncio.wait_for(reader.read(OK), timeout=10) == b"OK"
+            if not result:
+                return
+            writer.write(b"P")
+            await writer.drain()
             result = await asyncio.wait_for(reader.read(OK), timeout=10) == b"OK"
             while result:
                 payload = {dev: (last_update[dev], val) for dev, val in tmpdata.items()}
@@ -276,7 +286,7 @@ async def memcache_as(tmpdata, last_update):
 
     def memcache():
         # Get the data, don't care about race conditions.
-        data = jsondumps((tmpdata, last_update, datetime.now().isoformat()))
+        data = jsondumps((tmpdata, last_update, datetime.now()))
         m1.set(DEV_NAME, data)
         m2.set(DEV_NAME, data)
 

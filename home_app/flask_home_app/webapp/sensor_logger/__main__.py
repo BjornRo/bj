@@ -1,18 +1,21 @@
-from ast import literal_eval
-from home_app.remote_docker.sensor_logger.__main__ import TOKEN
-import paho.mqtt.client as mqtt
-from datetime import datetime
-import sqlite3
+from configparser import ConfigParser
 from threading import Thread, Semaphore
-import schedule
+from datetime import datetime
 from time import sleep
 from pymemcache.client.base import PooledClient
+import bcrypt
+
+import schedule
 import json
-#from bmemcached import Client
-from configparser import ConfigParser
-import socket
 import ssl
 import sys
+
+# Replace encoder to not use white space. Default to use isoformat for datetime =>
+#   Since I know the types I'm dumping. If needed custom encoder or an "actual" default function.
+json._default_encoder = json.JSONEncoder(separators=(',', ':'), default=lambda dt: dt.isoformat())
+
+# Some imports are put into the function that require that module.
+#   These modules are loaded before function-loop.
 
 # Idea is to keep this as threading and remote_docker/sensor_logger as asyncio
 # This is to compare the flavours of concurrency.
@@ -31,7 +34,8 @@ SSLPATH_TUPLE = (SSLPATH + "fullchain.pem", SSLPATH + "privkey.pem")
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(*SSLPATH_TUPLE)
 
-# Token for an eventual use
+# Token for an eventual use.
+USER = CFG['TOKEN']['user']
 TOKEN = CFG["TOKEN"]["token"]
 
 # Socket info constants.
@@ -52,11 +56,11 @@ def main():
             "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
         }
     }
-    device_login = {}
+    device_login = {USER: TOKEN.encode(UTF8)}
     # Read data file. Adds the info for remote devices.
     with open("remotedata.json", "r") as f:
         for mainkey, mainvalue in json.loads(f.read()).items():
-            device_login[mainkey] = mainvalue.pop("password")
+            device_login[mainkey] = mainvalue.pop("password").encode(UTF8)
             main_node_data[mainkey] = mainvalue
 
     # Associated dict to see if the values has been updated. This is to let remote nodes
@@ -71,7 +75,7 @@ def main():
         def serialize(self, key, value):
             return json.dumps(value), 2
 
-    memcache_local = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=3)
+    memcache_local = PooledClient("memcached:11211", serde=JSerde(), max_pool_size=2)
     for key in main_node_data.keys():
         memcache_local.set("weather_data_" + key, main_node_data[key])
 
@@ -124,7 +128,10 @@ def main():
 
     while 1:
         schedule.run_pending()
-        sleep(10)
+        sleeptime = schedule.idle_seconds()
+        while sleeptime > 0:
+            sleep(sleeptime)
+            sleeptime = schedule.idle_seconds()
 
 
 def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lock):
@@ -135,23 +142,41 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
     }
     keys = ("Temperature", "Humidity", "Airpressure")
 
+    def get_iterable(recvdata, maindata):
+        if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
+            return recvdata.items()
+        if isinstance(recvdata, list) and len(recvdata) == len(maindata):
+            return zip(keys, recvdata)
+        return None
+
     def client_handler(client: ssl.SSLSocket):
-        # No need for contex-manager due to finally force close clause in parent.
+        # No need for contex-manager due to always trying to close conn at the end.
         try:
-            client.settimeout(5)
+            client.settimeout(2)
             # Get device name. Send devicename and password in one.
             device_name = client.recv(DEV_NAME_LEN).decode(UTF8)
             # Check if password is ok, else throw keyerror or return.
-            passw = device_login[device_name].encode(UTF8)
-            if client.recv(len(passw)) != passw:
+            passw = device_login[device_name]
+            if not bcrypt.checkpw(client.recv(64), passw):
                 return
-            # Notify that it is ok to send data now. Change timeout to keep connection alive.
+            client.send(b"OK")
+            # Decide what the client wants to do.
+            recvdata = client.recv(COMMAND_LEN)
+            if recvdata == b"G": # [G]ET
+                return client.sendall(json.dumps((main_node_data, time_last_update)).encode(UTF8))
+            elif recvdata == b"P": # [P]OST
+                pass
+            else:
+                return
+
+            # POST => Notify that it is ok to send data now. Change timeout to keep connection alive.
             client.settimeout(60)
             client.send(b"OK")
             # While connection is alive, send data. If connection is lost, then an
             # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
                 # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
+                # Fixed max 512 bytes. This value is plenty.
                 recvdata = client.recv(512)
                 # If data is empty, client disconnected.
                 if not recvdata:
@@ -166,29 +191,20 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                         continue
                     if time_last_update[device_name][device_key] >= dt_time:
                         continue
-                    if isinstance(data, dict):
-                        if data.keys() != main_node_data[device_name][device_key].keys():
-                            continue
-                        data_generator = data.items()
-                    elif isinstance(data, list):
-                        if len(data) != len(main_node_data[device_name][device_key]):
-                            continue
-                        data_generator = zip(keys, data)
-                    else:
-                        # If data is not in iter_format.
+                    iter_obj = get_iterable(data, main_node_data[device_name][device_key])
+                    if iter_obj is None:
                         continue
                     tmpdata = {}
-                    for data_key, value in data_generator:
+                    for data_key, value in iter_obj:
                         if not _test_value(data_key, value, 100):
                             break
                         tmpdata[data_key] = value
                     else:
                         with lock:
-                            main_node_data[device_name][device_key].update(tmpdata)
+                            main_node_data[device_name][device_key] |= tmpdata
                             main_node_new_values[device_name][device_key] = True
                         time_last_update[device_name][device_key] = dt_time
-                timedata = {k: v.isoformat() for k, v in time_last_update[device_name].items()}
-                mc_local.set("weather_data_" + device_name + "_time", timedata)
+                mc_local.set(f"weather_data_{device_name}_time", time_last_update[device_name])
                 mc_local.set("weather_data_" + device_name, main_node_data[device_name])
         except Exception as e:
             print(e, file=sys.stderr)
@@ -198,6 +214,9 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             except:
                 pass
 
+
+    import socket
+    from zlib import decompress, compress
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         srv.bind(("", S_PORT))
         srv.listen(10)
@@ -210,7 +229,8 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 except:
                     pass
 
-"""
+
+
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
     def test_compare_restore(value1, value2):
         # Get the latest value from two sources that may lag or timeout.. woohoo
@@ -237,6 +257,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
             pass
         return None
 
+    from bmemcached import Client
     memcachier1 = Client((CFG["DATA"]["server"],), CFG["DATA"]["user"], CFG["DATA"]["pass"])
     memcachier2 = Client((CFG["DATA2"]["server"],), CFG["DATA2"]["user"], CFG["DATA2"]["pass"])
 
@@ -283,12 +304,10 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
                     with lock:
                         sub_node_data[device].update(tmpdict)
                         sub_node_new_values[device] = True
-"""
+
 
 # mqtt function does all the heavy lifting sorting out bad data.
 def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semaphore):
-    db = sqlite3.connect("/db/main_db.db")
-
     def querydb():
         update_node = [s_node for s_node, nv in main_node_new_values.items() if any(nv.values())]
         if not update_node:
@@ -306,7 +325,7 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semap
                 if new_value:
                     main_node_new_values[sub_node][device] = False
                     new_data[sub_node].append((device, main_node_data[sub_node][device].copy()))
-        # Release all semaphores when done.
+        # Release all semaphores when done. All values are tested to be valid in _test_value().
         lock.release(len(main_node_data))
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
@@ -320,6 +339,9 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semap
 
     def reload_ssl():
         context.load_cert_chain(*SSLPATH_TUPLE)
+
+    import sqlite3
+    db = sqlite3.connect("/db/main_db.db")
 
     # Due to the almost non-existing concurrency, just keep conn alive.
     schedule.every().hour.at(":30").do(querydb)
@@ -365,19 +387,21 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
                 h_tmpdata[topic].update(tmpdict)
                 h_new_values[topic] = True
 
+    from paho.mqtt.client import Client
+    from ast import literal_eval
     # Setup and connect mqtt client. Return client object.
     status_path = "balcony/relay/status"
-    client = mqtt.Client("br_logger")
-    client.on_connect = on_connect
-    client.on_message = on_message
+    mqtt = Client("br_logger")
+    mqtt.on_connect = on_connect
+    mqtt.on_message = on_message
     while True:
         try:
-            if client.connect("mqtt", 1883, 60) == 0:
+            if mqtt.connect("mqtt", 1883, 60) == 0:
                 break
         except:
             pass
         sleep(5)
-    client.loop_forever()
+    mqtt.loop_forever()
 
 
 def _test_value(key, value, magnitude=1) -> bool:
