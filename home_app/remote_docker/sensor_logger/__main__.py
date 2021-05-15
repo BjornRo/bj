@@ -6,6 +6,7 @@ from configparser import ConfigParser
 from bmemcached import Client as mClient
 from time import sleep
 from textwrap import dedent
+from zlib import compress, decompress
 
 # from jsonpickle import encode as jpencode
 # from zlib import compress
@@ -21,7 +22,7 @@ from aiohttp import web
 
 # Replace encoder to not use white space. Default to use isoformat for datetime =>
 #   Since I know the types I'm dumping. If needed custom encoder or an "actual" default function.
-json._default_encoder = json.JSONEncoder(separators=(',', ':'), default=lambda dt: dt.isoformat())
+json._default_encoder = json.JSONEncoder(separators=(",", ":"), default=lambda dt: dt.isoformat())
 
 # Ugly imports, premature optimization perhaps. Whatever to make pizw fasterish.
 
@@ -151,7 +152,7 @@ async def socket_send_data(tmpdata, last_update):
             result = await asyncio.wait_for(reader.read(OK), timeout=10) == b"OK"
             while result:
                 payload = {dev: (last_update[dev], val) for dev, val in tmpdata.items()}
-                writer.write(jsondumps(payload).encode(UTF8))
+                writer.write(compress(jsondumps(payload).encode(UTF8)))
                 await writer.drain()
                 await asyncio.sleep(10)
         except:
@@ -184,7 +185,7 @@ async def low_lvl_http(tmpdata_last_update):
             # Can't decide on query vs sending the file. Just have both ready for usage.
             if TOKEN == rel_url[0]:
                 if "query" == rel_url[1]:
-                    return web.json_response(await get_data_selector("Q"))
+                    return web.Response(text=decompress(await get_data_selector("Q")).decode(UTF8))
                 if "file" == rel_url[1]:
                     return web.Response(
                         body=await get_data_selector("F"),
@@ -210,9 +211,9 @@ async def socket_server(tmpdata_last_update):
                 command = await asyncio.wait_for(reader.read(COMMAND_LEN), timeout=4)
                 data = None
                 if command == b"S":
-                    data = jsondumps(tmpdata_last_update).encode(UTF8)
+                    data = compress(jsondumps(tmpdata_last_update).encode(UTF8))
                 elif command == b"Q":
-                    data = (await get_data_selector("Q")).encode(UTF8)
+                    data = await get_data_selector("Q")
                 elif command == b"F":
                     data = DB_FILE.encode(UTF8) + b"\n" + await get_data_selector("F")
                 if data is not None:
@@ -240,7 +241,7 @@ async def reload_ssl(seconds=86400):
 
 async def get_data_selector(method_name: str):
     if method_name == "F":
-        return await get_update_data(0, get_filebytes, DB_FILEPATH)
+        return await get_update_data(0, get_filebytes, DB_FILEPATH, DB_FILE)
     if method_name == "Q":
         return await get_update_data(1, get_db_data)
     return None
@@ -264,11 +265,11 @@ async def get_update_data(index, f, *args):
 async def get_db_data():
     async with dbconnect(DB_FILEPATH) as db:
         async with db.execute(DB_QUERY) as c:
-            return jsondumps((DB_COLUMNS, await c.fetchall()))
+            return compress(jsondumps((DB_COLUMNS, await c.fetchall())).encode(UTF8), 9)
 
 
-async def get_filebytes(filename):
-    async with async_open(filename, "rb") as f:
+async def get_filebytes(filepath, filename):
+    async with async_open(filepath, "rb") as f:
         source = BytesIO(await f.read())
     tardb = BytesIO()
     with tarfile.open(fileobj=tardb, mode="w:gz") as tar:

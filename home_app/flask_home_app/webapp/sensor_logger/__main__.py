@@ -12,7 +12,7 @@ import sys
 
 # Replace encoder to not use white space. Default to use isoformat for datetime =>
 #   Since I know the types I'm dumping. If needed custom encoder or an "actual" default function.
-json._default_encoder = json.JSONEncoder(separators=(',', ':'), default=lambda dt: dt.isoformat())
+json._default_encoder = json.JSONEncoder(separators=(",", ":"), default=lambda dt: dt.isoformat())
 
 # Some imports are put into the function that require that module.
 #   These modules are loaded before function-loop.
@@ -35,7 +35,7 @@ context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(*SSLPATH_TUPLE)
 
 # Token for an eventual use.
-USER = CFG['TOKEN']['user']
+USER = CFG["TOKEN"]["user"]
 TOKEN = CFG["TOKEN"]["token"]
 
 # Socket info constants.
@@ -141,7 +141,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
         if sub_node != "home"
     }
     keys = ("Temperature", "Humidity", "Airpressure")
-    denylist = (b"getstatus",) # Might refactor into 'user' have allowed methods, (P,G..)
+    denylist = (b"getstatus",)  # Might refactor into 'user' have allowed methods, (P,G..)
 
     def get_iterable(recvdata, maindata):
         if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
@@ -149,6 +149,34 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
         if isinstance(recvdata, list) and len(recvdata) == len(maindata):
             return zip(keys, recvdata)
         return None
+
+    def parse_and_update(device_name, payload) -> None:
+        update_cache = False
+        for device_key, (time, data) in payload.items():
+            try:
+                # Test if time is valid.
+                dt_time = datetime.fromisoformat(time)
+            except:
+                continue
+            if time_last_update[device_name][device_key] >= dt_time:
+                continue
+            iter_obj = get_iterable(data, main_node_data[device_name][device_key])
+            if iter_obj is None:
+                continue
+            tmpdata = {}
+            for data_key, value in iter_obj:
+                if not _test_value(data_key, value, 100):
+                    break
+                tmpdata[data_key] = value
+            else:
+                with lock:
+                    main_node_data[device_name][device_key] |= tmpdata
+                    main_node_new_values[device_name][device_key] = True
+                time_last_update[device_name][device_key] = dt_time
+                update_cache = True
+        if update_cache:
+            mc_local.set(f"weather_data_{device_name}_time", time_last_update[device_name])
+            mc_local.set("weather_data_" + device_name, main_node_data[device_name])
 
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to always trying to close conn at the end.
@@ -163,11 +191,12 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             client.send(b"OK")
             # Decide what the client wants to do.
             recvdata = client.recv(COMMAND_LEN)
-            if recvdata == b"G": # [G]ET
-                return client.sendall(json.dumps((main_node_data, time_last_update)).encode(UTF8))
+            if recvdata == b"G":  # [G]ET
+                to_send = json.dumps((main_node_data, time_last_update)).encode(UTF8)
+                return client.sendall(compress(to_send))
             if device_name in denylist:
                 return
-            if recvdata == b"P": # [P]OST
+            if recvdata == b"P":  # [P]OST
                 pass
             else:
                 return
@@ -184,31 +213,13 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 # If data is empty, client disconnected.
                 if not recvdata:
                     break
-                payload = json.loads(recvdata.decode(UTF8))
-                # Will throw exception if payload isn't a dict.
-                for device_key, (time, data) in payload.items():
-                    try:
-                        # Test if time is valid.
-                        dt_time = datetime.fromisoformat(time)
-                    except:
-                        continue
-                    if time_last_update[device_name][device_key] >= dt_time:
-                        continue
-                    iter_obj = get_iterable(data, main_node_data[device_name][device_key])
-                    if iter_obj is None:
-                        continue
-                    tmpdata = {}
-                    for data_key, value in iter_obj:
-                        if not _test_value(data_key, value, 100):
-                            break
-                        tmpdata[data_key] = value
-                    else:
-                        with lock:
-                            main_node_data[device_name][device_key] |= tmpdata
-                            main_node_new_values[device_name][device_key] = True
-                        time_last_update[device_name][device_key] = dt_time
-                mc_local.set(f"weather_data_{device_name}_time", time_last_update[device_name])
-                mc_local.set("weather_data_" + device_name, main_node_data[device_name])
+                # Test if data is compressed
+                try:
+                    recvdata = decompress(recvdata)
+                except:
+                    pass
+                # Will throw exception if received data is not a dict.
+                parse_and_update(device_name, json.loads(recvdata.decode(UTF8)))
         except Exception as e:
             print(e, file=sys.stderr)
         finally:
@@ -217,9 +228,9 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             except:
                 pass
 
-
     import socket
     from zlib import decompress, compress
+
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         srv.bind(("", S_PORT))
         srv.listen(10)
@@ -231,7 +242,6 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                     Thread(target=client_handler, args=(client,), daemon=True).start()
                 except:
                     pass
-
 
 
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
@@ -261,6 +271,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
         return None
 
     from bmemcached import Client
+
     memcachier1 = Client((CFG["DATA"]["server"],), CFG["DATA"]["user"], CFG["DATA"]["pass"])
     memcachier2 = Client((CFG["DATA2"]["server"],), CFG["DATA2"]["user"], CFG["DATA2"]["pass"])
 
@@ -344,6 +355,7 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semap
         context.load_cert_chain(*SSLPATH_TUPLE)
 
     import sqlite3
+
     db = sqlite3.connect("/db/main_db.db")
 
     # Due to the almost non-existing concurrency, just keep conn alive.
@@ -392,6 +404,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
 
     from paho.mqtt.client import Client
     from ast import literal_eval
+
     # Setup and connect mqtt client. Return client object.
     status_path = "balcony/relay/status"
     mqtt = Client("br_logger")
