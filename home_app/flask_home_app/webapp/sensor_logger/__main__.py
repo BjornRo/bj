@@ -425,7 +425,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
 def get_iterable(recvdata, maindata):
     if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
         return recvdata.items()
-    if isinstance(recvdata, list) and len(recvdata) == len(maindata):
+    if isinstance(recvdata, (tuple, list)) and len(recvdata) == len(maindata):
         return zip(MINOR_KEYS, recvdata)
     return None
 
