@@ -24,6 +24,7 @@ json._default_encoder = json.JSONEncoder(separators=(",", ":"), default=lambda d
 
 # MISC
 UTF8 = "utf-8"
+MINOR_KEYS = ("Temperature", "Humidity", "Airpressure")
 
 # Config reader -- Path(__file__).parent.absolute() /
 CFG = ConfigParser()
@@ -142,18 +143,10 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
         for sub_node, sub_node_data in main_node_data.items()
         if sub_node != "home"
     }
-    keys = ("Temperature", "Humidity", "Airpressure")
     denylist = (b"getstatus",)  # Might refactor into 'user' have allowed methods, (P,G..)
 
-    def get_iterable(recvdata, maindata):
-        if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
-            return recvdata.items()
-        if isinstance(recvdata, list) and len(recvdata) == len(maindata):
-            return zip(keys, recvdata)
-        return None
-
     def validate_time(prev_datetime, time) -> Union[datetime, None]:
-        try: # All exceptions should be silenced.
+        try:  # All exceptions should be silenced.
             if prev_datetime < (dt := datetime.fromisoformat(time)):
                 return dt
         except:
@@ -225,9 +218,9 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                     pass
                 # Will throw exception if received data is not a dict.
                 parse_and_update(device_name, json.loads(recvdata.decode(UTF8)))
-        except (TypeError, ): # This should never happen.
+        except (TypeError,):  # This should never happen.
             traceback.print_exc()
-        except Exception as e: # Just to log if any less important exceptions such as socket.timeout
+        except Exception as e:  # Just to log if any less important exceptions such as socket.timeout
             print(e, file=sys.stderr)
         finally:
             try:
@@ -247,7 +240,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                     client = sslsrv.accept()[0]
                     # Spawn a new thread.
                     Thread(target=client_handler, args=(client,), daemon=True).start()
-                except: # Don't care about faulty clients with no SSL wrapper.
+                except:  # Don't care about faulty clients with no SSL wrapper.
                     pass
 
 
@@ -379,36 +372,26 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
             client.subscribe("home/" + topic)
 
     def on_message(client, userdata, msg):
-        try: # Get values into a listlike form - Test valid payload.
+        try:  # Get values into a listlike form - Test valid payload.
             listlike = literal_eval(msg.payload.decode(UTF8))
             if isinstance(listlike, (tuple, dict, list)):
                 pass
             elif isinstance(listlike, (int, float)):
                 listlike = (listlike,)
-            else: # Unknown type.
+            else:  # Unknown type.
                 return
         except:
             return
 
         # Handle the topic depending on what it is about.
         topic = msg.topic.replace("home/", "")
-        if status_path == topic: # Test topic. Remove all 0,1. Set should be empty to be valid.
+        if status_path == topic:  # Test topic. Remove all 0,1. Set should be empty to be valid.
             if not set(listlike).difference(set((0, 1))) and len(listlike) == 4:
                 memcache.set("relay_status", listlike)
             return
-
-        # Check if length or keys match.
-        if isinstance(listlike, (tuple,list)):
-            if len(h_tmpdata[topic]) != len(listlike):
-                return
-            iter_obj = zip(keys, listlike)
-        elif isinstance(listlike, dict):
-            if h_tmpdata[topic].keys() != listlike.keys():
-                return
-            iter_obj = listlike.items()
-        else:
+        iter_obj = get_iterable(listlike, h_tmpdata[topic])
+        if iter_obj is None:
             return
-
         tmpdict = {}
         for key, value in iter_obj:
             # If a device sends bad data -> break and discard, else update
@@ -424,14 +407,13 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
     from paho.mqtt.client import Client
     from ast import literal_eval
 
-    keys = ("Temperature", "Humidity", "Airpressure")
     # Setup and connect mqtt client. Return client object.
     status_path = "balcony/relay/status"
     mqtt = Client("br_logger")
     mqtt.on_connect = on_connect
     mqtt.on_message = on_message
     while True:
-        try: # Wait until mqtt server is connectable. No need to read exceptions here.
+        try:  # Wait until mqtt server is connectable. No need to read exceptions here.
             if mqtt.connect("mqtt", 1883, 60) == 0:
                 break
         except:
@@ -440,8 +422,16 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
     mqtt.loop_forever()
 
 
+def get_iterable(recvdata, maindata):
+    if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
+        return recvdata.items()
+    if isinstance(recvdata, list) and len(recvdata) == len(maindata):
+        return zip(MINOR_KEYS, recvdata)
+    return None
+
+
 def _test_value(key, value, magnitude=1) -> bool:
-    try: # Anything that isn't a number will be rejected by try.
+    try:  # Anything that isn't a number will be rejected by try.
         value *= magnitude
         if key == "Temperature":
             return -5000 <= value <= 6000
