@@ -5,6 +5,7 @@ from time import sleep
 from typing import Union
 from pymemcache.client.base import PooledClient
 from bcrypt import checkpw
+from ast import literal_eval
 import traceback
 
 import schedule
@@ -153,9 +154,21 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             pass
         return None
 
-    def parse_and_update(device_name, payload) -> None:
+    def parse_and_update(device_name: str, payload: str) -> None:
         update_cache = False
-        for device_key, (time, data) in payload.items():
+        try:  # First test if it's a valid json object
+            data = json.loads(payload)
+        except:  # Else fallback to literal eval
+            data = literal_eval(payload)
+
+        if isinstance(data, dict):
+            data = data.items()
+        elif isinstance(data, (list, tuple)):
+            if not isinstance(data[0], (list, tuple)):
+                raise Exception("Parsed data is not a list of lists.")
+        else:
+            return
+        for device_key, (time, data) in data:
             dt_time = validate_time(time_last_update[device_name][device_key], time)
             if dt_time is None:
                 continue
@@ -205,7 +218,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # While connection is alive, send data. If connection is lost, then an
             # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
-                # Structure: {sub_device_name: [time, {data}]} or {sub_device_name: [time, [data]]}
+                # Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
                 # Fixed max 512 bytes. This value is plenty.
                 recvdata = client.recv(512)
                 # If data is empty, client disconnected.
@@ -216,8 +229,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                     recvdata = decompress(recvdata)
                 except:
                     pass
-                # Will throw exception if received data is not a dict.
-                parse_and_update(device_name, json.loads(recvdata.decode(UTF8)))
+                parse_and_update(device_name, recvdata.decode(UTF8))
         except (TypeError,):  # This should never happen.
             traceback.print_exc()
         except Exception as e:  # Just to log if any less important exceptions such as socket.timeout
@@ -405,7 +417,6 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
                 h_new_values[topic] = True
 
     from paho.mqtt.client import Client
-    from ast import literal_eval
 
     # Setup and connect mqtt client. Return client object.
     status_path = "balcony/relay/status"
@@ -422,7 +433,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
     mqtt.loop_forever()
 
 
-def get_iterable(recvdata, maindata):
+def get_iterable(recvdata: Union[dict, list, tuple], maindata: dict):
     if isinstance(recvdata, dict) and recvdata.keys() == maindata.keys():
         return recvdata.items()
     if isinstance(recvdata, (tuple, list)) and len(recvdata) == len(maindata):
@@ -430,7 +441,7 @@ def get_iterable(recvdata, maindata):
     return None
 
 
-def _test_value(key, value, magnitude=1) -> bool:
+def _test_value(key: str, value: Union[int, float], magnitude: int = 1) -> bool:
     try:  # Anything that isn't a number will be rejected by try.
         value *= magnitude
         if key == "Temperature":
