@@ -133,9 +133,8 @@ def main():
     while 1:
         schedule.run_pending()
         sleeptime = schedule.idle_seconds()
-        while sleeptime > 0:
+        if sleeptime > 0:
             sleep(sleeptime)
-            sleeptime = schedule.idle_seconds()
 
 
 def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lock):
