@@ -26,14 +26,6 @@ DB_NAME = "main_db.db"
 local_addr = (["192", "168"], ["127", "0"])
 memcache = PooledClient("memcached:11211", serde=JSerde())
 
-# Set data for memcache to prevent Nones.
-# fake_data = {
-#     "bikeroom/temp": {"Temperature": -99},
-#     "balcony/temphumid": {"Temperature": -99, "Humidity": -99},
-#     "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
-# }
-# fake_status = (-1, -1, -1, -1)
-
 
 def create_app():
     app = Flask(__name__)
@@ -46,12 +38,13 @@ def create_app():
     with app.app_context():
         db.session.execute("PRAGMA foreign_keys=on")
 
-    #from .views import views
+    # from .views import views
 
     # from .auth import auth
     from . import datavisualizer, booking, data, views
-    #from .booking import booking
-    #from .data import data
+
+    # from .booking import booking
+    # from .data import data
 
     app.register_blueprint(views, url_prefix="/")
     # app.register_blueprint(auth, url_prefix="/")

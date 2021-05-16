@@ -11,6 +11,7 @@ cfg.read("config.ini")
 
 @data.route("/api", methods=["POST"])
 def api():
+    return 404
     form = request.form
     if cfg["USER"]["uid"] == form.get("user") and cfg["USER"]["psw"] == form.get("password"):
         data = form.get("data")

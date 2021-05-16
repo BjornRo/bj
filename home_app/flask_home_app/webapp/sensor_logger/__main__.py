@@ -2,8 +2,10 @@ from configparser import ConfigParser
 from threading import Thread, Semaphore
 from datetime import datetime
 from time import sleep
+from typing import Union
 from pymemcache.client.base import PooledClient
 from bcrypt import checkpw
+import traceback
 
 import schedule
 import json
@@ -150,15 +152,19 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             return zip(keys, recvdata)
         return None
 
+    def validate_time(prev_datetime, time) -> Union[datetime, None]:
+        try: # All exceptions should be silenced.
+            if prev_datetime < (dt := datetime.fromisoformat(time)):
+                return dt
+        except:
+            pass
+        return None
+
     def parse_and_update(device_name, payload) -> None:
         update_cache = False
         for device_key, (time, data) in payload.items():
-            try:
-                # Test if time is valid.
-                dt_time = datetime.fromisoformat(time)
-            except:
-                continue
-            if time_last_update[device_name][device_key] >= dt_time:
+            dt_time = validate_time(time_last_update[device_name][device_key], time)
+            if dt_time is None:
                 continue
             iter_obj = get_iterable(data, main_node_data[device_name][device_key])
             if iter_obj is None:
@@ -185,8 +191,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # Get device name. Send devicename and password in one.
             device_name = client.recv(DEV_NAME_LEN).decode(UTF8)
             # Check if password is ok, else throw keyerror or return.
-            passw = device_login[device_name]
-            if not checkpw(client.recv(64), passw):
+            if not checkpw(client.recv(64), device_login[device_name]):
                 return
             client.send(b"OK")
             # Decide what the client wants to do.
@@ -220,7 +225,9 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                     pass
                 # Will throw exception if received data is not a dict.
                 parse_and_update(device_name, json.loads(recvdata.decode(UTF8)))
-        except Exception as e:
+        except (TypeError, ): # This should never happen.
+            traceback.print_exc()
+        except Exception as e: # Just to log if any less important exceptions such as socket.timeout
             print(e, file=sys.stderr)
         finally:
             try:
@@ -233,17 +240,18 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         srv.bind(("", S_PORT))
-        srv.listen(10)
+        srv.listen(8)
         with context.wrap_socket(srv, server_side=True) as sslsrv:
             while 1:
                 try:
                     client = sslsrv.accept()[0]
                     # Spawn a new thread.
                     Thread(target=client_handler, args=(client,), daemon=True).start()
-                except:
+                except: # Don't care about faulty clients with no SSL wrapper.
                     pass
 
 
+"""
 def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, lock):
     def test_compare_restore(value1, value2):
         # Get the latest value from two sources that may lag or timeout.. woohoo
@@ -318,7 +326,7 @@ def remote_fetcher(sub_node_data, sub_node_new_values, memcache, remote_key, loc
                     with lock:
                         sub_node_data[device].update(tmpdict)
                         sub_node_new_values[device] = True
-
+"""
 
 # mqtt function does all the heavy lifting sorting out bad data.
 def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semaphore):
@@ -340,6 +348,7 @@ def schedule_setup(main_node_data: dict, main_node_new_values: dict, lock: Semap
                     main_node_new_values[sub_node][device] = False
                     new_data[sub_node].append((device, main_node_data[sub_node][device].copy()))
         # Release all semaphores when done. All values are tested to be valid in _test_value().
+        # If main crashes for some unknown reason, all threads dies due to daemon. No deadlocks...
         lock.release(len(main_node_data))
         cursor = db.cursor()
         cursor.execute(f"INSERT INTO Timestamp VALUES ('{time_now}')")
@@ -370,28 +379,38 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
             client.subscribe("home/" + topic)
 
     def on_message(client, userdata, msg):
-        # Get values into a listlike form.
-        try:
-            listlike = literal_eval(msg.payload.decode("utf-8"))
-            if isinstance(listlike, dict):
-                listlike = tuple(listlike.values())
-            elif not (isinstance(listlike, tuple) or isinstance(listlike, list)):
+        try: # Get values into a listlike form - Test valid payload.
+            listlike = literal_eval(msg.payload.decode(UTF8))
+            if isinstance(listlike, (tuple, dict, list)):
+                pass
+            elif isinstance(listlike, (int, float)):
                 listlike = (listlike,)
+            else: # Unknown type.
+                return
         except:
             return
 
         # Handle the topic depending on what it is about.
         topic = msg.topic.replace("home/", "")
-        if status_path == topic:
+        if status_path == topic: # Test topic. Remove all 0,1. Set should be empty to be valid.
             if not set(listlike).difference(set((0, 1))) and len(listlike) == 4:
                 memcache.set("relay_status", listlike)
             return
 
-        if len(listlike) != len(h_tmpdata[topic]):
+        # Check if length or keys match.
+        if isinstance(listlike, (tuple,list)):
+            if len(h_tmpdata[topic]) != len(listlike):
+                return
+            iter_obj = zip(keys, listlike)
+        elif isinstance(listlike, dict):
+            if h_tmpdata[topic].keys() != listlike.keys():
+                return
+            iter_obj = listlike.items()
+        else:
             return
 
         tmpdict = {}
-        for key, value in zip(h_tmpdata[topic].keys(), listlike):
+        for key, value in iter_obj:
             # If a device sends bad data -> break and discard, else update
             if not _test_value(key, value):
                 break
@@ -399,19 +418,20 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
         else:
             memcache.set("weather_data_home", h_tmpdata)
             with lock:
-                h_tmpdata[topic].update(tmpdict)
+                h_tmpdata[topic] |= tmpdict
                 h_new_values[topic] = True
 
     from paho.mqtt.client import Client
     from ast import literal_eval
 
+    keys = ("Temperature", "Humidity", "Airpressure")
     # Setup and connect mqtt client. Return client object.
     status_path = "balcony/relay/status"
     mqtt = Client("br_logger")
     mqtt.on_connect = on_connect
     mqtt.on_message = on_message
     while True:
-        try:
+        try: # Wait until mqtt server is connectable. No need to read exceptions here.
             if mqtt.connect("mqtt", 1883, 60) == 0:
                 break
         except:
@@ -421,7 +441,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
 
 
 def _test_value(key, value, magnitude=1) -> bool:
-    try:
+    try: # Anything that isn't a number will be rejected by try.
         value *= magnitude
         if key == "Temperature":
             return -5000 <= value <= 6000
