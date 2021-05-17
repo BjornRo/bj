@@ -272,6 +272,8 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 parse_and_update(device_name, recvdata.decode())
         except (TypeError,):  # This should never happen.
             traceback.print_exc()
+        except (socket.timeout,):  # This should never happen.
+            pass
         except Exception as e:  # Just to log if any less important exceptions such as socket.timeout
             print(e, file=sys.stderr)
         finally:
