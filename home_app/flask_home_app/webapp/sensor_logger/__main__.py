@@ -189,37 +189,44 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             mc_local.set(f"weather_data_{device_name}_time", time_last_update[device_name])
             mc_local.set("weather_data_" + device_name, main_node_data[device_name])
 
-    def recvall(sock, size, buf_size):
+    def recvall(client, size, buf_size=4096):
         received_chunks = []
         remaining = size
         while remaining > 0:
-            received = sock.recv(min(remaining, buf_size))
+            received = client.recv(min(remaining, buf_size))
             if not received:
                 return None
             received_chunks.append(received)
             remaining -= len(received)
         return b''.join(received_chunks)
 
+    def first_package_and_validate(client, user_pw_total_length):
+        data = b''
+        buf_size = user_pw_total_length
+        remaining = buf_size
+        while 1:
+            data += client.recv(remaining)
+            if data.endswith(b'\r\n'):
+                break
+            elif not data or remaining <= 0:
+                return None
+            remaining -= len(data)
+        try:
+            device_name, passw = data.splitlines()
+            device_name = device_name.decode(UTF8)
+            if checkpw(passw, device_login[device_name]):
+                return device_name
+        except:
+            pass
+        return None
+
+
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to always trying to close conn at the end.
         try:
             # Get device name, passw. Send devicename and password in one. login \n passw \r\n
-            data = b''
-            buf_size = 96
-            # This get max 96*2 bytes. Should be less.
-            while 1:
-                data += client.recv(buf_size)
-                if data.endswith(b'\r\n'):
-                    try:
-                        device_name, passw = data.splitlines()
-                        device_name = device_name.decode(UTF8)
-                    except:
-                        return
-                    break
-                elif not data or len(data) > buf_size:
-                    return
-            # Check if password is ok, else throw keyerror or return.nn
-            if not checkpw(passw, device_login[device_name]):
+            device_name = first_package_and_validate(client, 128)
+            if device_name is None:
                 return
             client.send(b"OK")
             # Decide what the client wants to do.
@@ -241,18 +248,23 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
                 # Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
-                # \x--\x-- to represent length of the payload. 255*index_0 + index_1
-                # [256 // 255, 256 % 255]
-                header = recvall(client, 2, 2)
+                # Three first bytes, \x--\x--\-- to represent length of the payload.
+                # b2 = (1_000_000 >> 16) & 0xff
+                # b1 = (1_000_000 >> 8) & 0xff
+                # b0 = (1_000_000 & 0xff)
+                # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
+                # b2, b1, b0 = list(bytearr) =>
+                # len = b2 << 16 | b1 << 8 | b0
+                header = recvall(client, 3, 3)
                 if not header:
                     break
                 # Calculate header length.
-                index_0, index_1 = list(header)
-                payload_len = 255 * index_0 + index_1
+                b2, b1, b0 = list(header)
+                payload_len = b2 << 16 | b1 << 8 | b0
                 if payload_len > max_payload:
                     break
                 recvdata = recvall(client, payload_len, max_payload)
-                if not recvdata:
+                if recvdata is None:
                     break
                 try:
                     recvdata = decompress(recvdata)
@@ -271,7 +283,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     import socket
     from zlib import decompress, compress
-    max_payload = 1024
+    max_payload = 2048
 
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         socket.setdefaulttimeout(2) # For ssl handshake and auth.

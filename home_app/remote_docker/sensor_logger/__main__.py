@@ -151,12 +151,12 @@ async def socket_send_data(tmpdata, last_update):
             await writer.drain()
             result = await asyncio.wait_for(reader.readexactly(OK), timeout=10) == b"OK"
             while result:
-                payload = compress(
+                bdata = compress(
                     jsondumps({dev: (last_update[dev], val) for dev, val in tmpdata.items()}).encode(UTF8)
                 )
-                # [256 // 255, 256 % 255], calculate header len.
-                payload_len = len(payload)
-                writer.write(bytearray([payload_len // 255, payload_len % 255]) + payload)
+                # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
+                dlen = len(bdata)
+                writer.write(bytearray(((dlen >> 16) & 255, (dlen >> 8) & 255, dlen & 255)) + bdata)
                 await writer.drain()
                 await asyncio.sleep(10)
         except:
