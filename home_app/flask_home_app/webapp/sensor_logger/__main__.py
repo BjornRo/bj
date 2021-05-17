@@ -44,7 +44,7 @@ TOKEN = CFG["TOKEN"]["token"]
 
 # Socket info constants.
 COMMAND_LEN = 1
-DEV_NAME_LEN = int(CFG["TOKEN"]["dev_name_len"])
+#DEV_NAME_LEN = int(CFG["TOKEN"]["dev_name_len"])
 
 # Socket setup
 S_PORT = 42661
@@ -189,14 +189,37 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             mc_local.set(f"weather_data_{device_name}_time", time_last_update[device_name])
             mc_local.set("weather_data_" + device_name, main_node_data[device_name])
 
+    def recvall(sock, size, buf_size):
+        received_chunks = []
+        remaining = size
+        while remaining > 0:
+            received = sock.recv(min(remaining, buf_size))
+            if not received:
+                return None
+            received_chunks.append(received)
+            remaining -= len(received)
+        return b''.join(received_chunks)
+
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to always trying to close conn at the end.
         try:
-            client.settimeout(2)
-            # Get device name. Send devicename and password in one.
-            device_name = client.recv(DEV_NAME_LEN).decode(UTF8)
-            # Check if password is ok, else throw keyerror or return.
-            if not checkpw(client.recv(64), device_login[device_name]):
+            # Get device name, passw. Send devicename and password in one. login \n passw \r\n
+            data = b''
+            buf_size = 96
+            # This get max 96*2 bytes. Should be less.
+            while 1:
+                data += client.recv(buf_size)
+                if data.endswith(b'\r\n'):
+                    try:
+                        device_name, passw = data.splitlines()
+                        device_name = device_name.decode(UTF8)
+                    except:
+                        return
+                    break
+                elif not data or len(data) > buf_size:
+                    return
+            # Check if password is ok, else throw keyerror or return.nn
+            if not checkpw(passw, device_login[device_name]):
                 return
             client.send(b"OK")
             # Decide what the client wants to do.
@@ -218,12 +241,19 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
                 # Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
-                # Fixed max 512 bytes. This value is plenty.
-                recvdata = client.recv(512)
-                # If data is empty, client disconnected.
+                # \x--\x-- to represent length of the payload. 255*index_0 + index_1
+                # [256 // 255, 256 % 255]
+                header = recvall(client, 2, 2)
+                if not header:
+                    break
+                # Calculate header length.
+                index_0, index_1 = list(header)
+                payload_len = 255 * index_0 + index_1
+                if payload_len > max_payload:
+                    break
+                recvdata = recvall(client, payload_len, max_payload)
                 if not recvdata:
                     break
-                # Test if data is compressed
                 try:
                     recvdata = decompress(recvdata)
                 except:
@@ -241,14 +271,16 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     import socket
     from zlib import decompress, compress
+    max_payload = 1024
 
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
+        socket.setdefaulttimeout(2) # For ssl handshake and auth.
         srv.bind(("", S_PORT))
         srv.listen(8)
         with context.wrap_socket(srv, server_side=True) as sslsrv:
             while 1:
                 try:
-                    client = sslsrv.accept()[0]
+                    client = sslsrv.accept()[0] # if timeout, client is not connected.
                     # Spawn a new thread.
                     Thread(target=client_handler, args=(client,), daemon=True).start()
                 except:  # Don't care about faulty clients with no SSL wrapper.

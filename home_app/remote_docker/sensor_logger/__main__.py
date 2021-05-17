@@ -140,19 +140,23 @@ async def socket_send_data(tmpdata, last_update):
     async def client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             # Send credentials, login and token.
-            writer.write(BDEV_NAME + BTOKEN)
+            writer.write(BDEV_NAME + b'\n' + BTOKEN + b'\r\n')
             await writer.drain()
             # If server doesn't reply with ok something has gone wrong. Otherwise just loop until
             # connection fails. Then an exception is thrown and function terminates.
-            result = await asyncio.wait_for(reader.read(OK), timeout=10) == b"OK"
+            result = await asyncio.wait_for(reader.readexactly(OK), timeout=10) == b"OK"
             if not result:
                 return
             writer.write(b"P")
             await writer.drain()
-            result = await asyncio.wait_for(reader.read(OK), timeout=10) == b"OK"
+            result = await asyncio.wait_for(reader.readexactly(OK), timeout=10) == b"OK"
             while result:
-                payload = {dev: (last_update[dev], val) for dev, val in tmpdata.items()}
-                writer.write(compress(jsondumps(payload).encode(UTF8)))
+                payload = compress(
+                    jsondumps({dev: (last_update[dev], val) for dev, val in tmpdata.items()}).encode(UTF8)
+                )
+                # [256 // 255, 256 % 255], calculate header len.
+                payload_len = len(payload)
+                writer.write(bytearray([payload_len // 255, payload_len % 255]) + payload)
                 await writer.drain()
                 await asyncio.sleep(10)
         except:
@@ -205,10 +209,10 @@ async def low_lvl_http(tmpdata_last_update):
 async def socket_server(tmpdata_last_update):
     async def c_handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            if BTOKEN == await asyncio.wait_for(reader.read(len(BTOKEN)), timeout=4):
+            if BTOKEN == await asyncio.wait_for(reader.readexactly(len(BTOKEN)), timeout=4):
                 writer.write(b"OK")
                 await writer.drain()
-                command = await asyncio.wait_for(reader.read(COMMAND_LEN), timeout=4)
+                command = await asyncio.wait_for(reader.readexactly(COMMAND_LEN), timeout=4)
                 data = None
                 if command == b"S":
                     data = compress(jsondumps(tmpdata_last_update).encode(UTF8))
