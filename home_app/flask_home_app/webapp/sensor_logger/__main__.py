@@ -24,7 +24,6 @@ json._default_encoder = json.JSONEncoder(separators=(",", ":"), default=lambda d
 # This is to compare the flavours of concurrency.
 
 # MISC
-UTF8 = "utf-8"
 MINOR_KEYS = ("Temperature", "Humidity", "Airpressure")
 
 # Config reader -- Path(__file__).parent.absolute() /
@@ -60,11 +59,11 @@ def main():
             "kitchen/temphumidpress": {"Temperature": -99, "Humidity": -99, "Airpressure": -99},
         }
     }
-    device_login = {USER: TOKEN.encode(UTF8)}
+    device_login = {USER: TOKEN.encode()}
     # Read data file. Adds the info for remote devices.
     with open("remotedata.json", "r") as f:
         for mainkey, mainvalue in json.loads(f.read()).items():
-            device_login[mainkey] = mainvalue.pop("password").encode(UTF8)
+            device_login[mainkey] = mainvalue.pop("password").encode()
             main_node_data[mainkey] = mainvalue
 
     # Associated dict to see if the values has been updated. This is to let remote nodes
@@ -213,7 +212,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             remaining -= len(data)
         try:
             device_name, passw = data.splitlines()
-            device_name = device_name.decode(UTF8)
+            device_name = device_name.decode()
             if checkpw(passw, device_login[device_name]):
                 return device_name
         except:
@@ -232,7 +231,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # Decide what the client wants to do.
             recvdata = client.recv(COMMAND_LEN)
             if recvdata == b"G":  # [G]ET
-                to_send = json.dumps((main_node_data, time_last_update)).encode(UTF8)
+                to_send = json.dumps((main_node_data, time_last_update)).encode()
                 return client.sendall(compress(to_send))
             if device_name in denylist:
                 return
@@ -270,7 +269,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                     recvdata = decompress(recvdata)
                 except:
                     pass
-                parse_and_update(device_name, recvdata.decode(UTF8))
+                parse_and_update(device_name, recvdata.decode())
         except (TypeError,):  # This should never happen.
             traceback.print_exc()
         except Exception as e:  # Just to log if any less important exceptions such as socket.timeout
@@ -428,7 +427,7 @@ def mqtt_agent(h_tmpdata: dict, h_new_values: dict, memcache, lock):
 
     def on_message(client, userdata, msg):
         try:  # Get values into a listlike form - Test valid payload.
-            listlike = literal_eval(msg.payload.decode(UTF8))
+            listlike = literal_eval(msg.payload.decode())
             if isinstance(listlike, (tuple, dict, list)):
                 pass
             elif isinstance(listlike, (int, float)):

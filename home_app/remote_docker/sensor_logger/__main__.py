@@ -36,7 +36,6 @@ last_request = [datetime.now()] * 2
 last_data = ["null"] * 2
 
 # MISC
-UTF8 = "utf-8"
 OK = 2
 COMMAND_LEN = 1
 MAIN_ADDR = CFG["MAIN"]["url"]
@@ -66,7 +65,7 @@ DB_QUERY = dedent(
 )
 
 DEV_NAME = CFG["DEVICE"]["name"]
-BDEV_NAME = DEV_NAME.encode(UTF8)
+BDEV_NAME = DEV_NAME.encode()
 DB_FILE = DEV_NAME + ".db"
 DB_FILEPATH = "/db/" + DB_FILE
 
@@ -78,7 +77,7 @@ S_PORT = 42661
 
 # Security
 TOKEN = CFG["DEVICE"]["token"]
-BTOKEN = TOKEN.encode(UTF8)
+BTOKEN = TOKEN.encode()
 
 # SSL Context
 SSLPATH = f'/etc/letsencrypt/live/{CFG["CERT"]["url"]}/'
@@ -152,7 +151,7 @@ async def socket_send_data(tmpdata, last_update):
             result = await asyncio.wait_for(reader.readexactly(OK), timeout=10) == b"OK"
             while result:
                 bdata = compress(
-                    jsondumps({dev: (last_update[dev], val) for dev, val in tmpdata.items()}).encode(UTF8)
+                    jsondumps({dev: (last_update[dev], val) for dev, val in tmpdata.items()}).encode()
                 )
                 # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
                 dlen = len(bdata)
@@ -189,7 +188,7 @@ async def low_lvl_http(tmpdata_last_update):
             # Can't decide on query vs sending the file. Just have both ready for usage.
             if TOKEN == rel_url[0]:
                 if "query" == rel_url[1]:
-                    return web.Response(text=decompress(await get_data_selector("Q")).decode(UTF8))
+                    return web.Response(text=decompress(await get_data_selector("Q")).decode())
                 if "file" == rel_url[1]:
                     return web.Response(
                         body=await get_data_selector("F"),
@@ -215,11 +214,11 @@ async def socket_server(tmpdata_last_update):
                 command = await asyncio.wait_for(reader.readexactly(COMMAND_LEN), timeout=4)
                 data = None
                 if command == b"S":
-                    data = compress(jsondumps(tmpdata_last_update).encode(UTF8))
+                    data = compress(jsondumps(tmpdata_last_update).encode())
                 elif command == b"Q":
                     data = await get_data_selector("Q")
                 elif command == b"F":
-                    data = DB_FILE.encode(UTF8) + b"\n" + await get_data_selector("F")
+                    data = DB_FILE.encode() + b"\n" + await get_data_selector("F")
                 if data is not None:
                     writer.write(data)
                     await writer.drain()
@@ -269,7 +268,7 @@ async def get_update_data(index, f, *args):
 async def get_db_data():
     async with dbconnect(DB_FILEPATH) as db:
         async with db.execute(DB_QUERY) as c:
-            return compress(jsondumps((DB_COLUMNS, await c.fetchall())).encode(UTF8), 9)
+            return compress(jsondumps((DB_COLUMNS, await c.fetchall())).encode(), 9)
 
 
 async def get_filebytes(filepath, filename):
@@ -312,14 +311,14 @@ async def mqtt_agent(sub_denylist, tmpdata, new_values, last_update):
             msg = message.payload
             # Check if string has ( and ) or [ and ]
             if (msg[0] == 40 and msg[-1] == 41) or (msg[0] == 91 and msg[-1] == 93):
-                listlike = tuple(map(int, msg[1:-1].split(b",")))
+                listlike = tuple(int(i) for i in msg[1:-1].split(b","))
             elif msg.isdigit():  # A number.
                 listlike = (int(msg),)
             else:  # dict
                 # listlike = json.loads(msg) #can't handle json...
                 return
             # Handle the topic depending on what it is about.
-            topic = message.topic[7:]  # Topic is decoded with utf8
+            topic = message.topic[7:]
             if len(listlike) != len(tmpdata[topic]):
                 return
 
