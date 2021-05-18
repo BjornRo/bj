@@ -29,6 +29,7 @@ MINOR_KEYS = ("Temperature", "Humidity", "Airpressure")
 # Config reader -- Path(__file__).parent.absolute() /
 CFG = ConfigParser()
 CFG.read("config.ini")
+JSONDATAFILE = "remotedata.json"
 
 # SSL Context
 HOSTNAME = CFG["CERT"]["url"]
@@ -61,7 +62,7 @@ def main():
     }
     device_login = {USER: TOKEN.encode()}
     # Read data file. Adds the info for remote devices.
-    with open("remotedata.json", "r") as f:
+    with open(JSONDATAFILE, "r") as f:
         for mainkey, mainvalue in json.loads(f.read()).items():
             device_login[mainkey] = mainvalue.pop("password").encode()
             main_node_data[mainkey] = mainvalue
@@ -209,7 +210,6 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             pass
         return None
 
-
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to always trying to close conn at the end.
         try: # First byte msg len => read rest of msg => parse and validate.
@@ -242,16 +242,12 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 # b0 = (1_000_000 & 0xff)
                 # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
                 # b2, b1, b0 = list(bytearr) =>
-                # len = (b2 << 16) | (b1 << 8) | b0
-                msg_len = recvall(client, 3, 3)
-                if not msg_len:
-                    break
+                # len = (b2 << 16) | (b1 << 8) | b0 --# Old algo
+                payload_len = int.from_bytes(recvall(client, 3, 3), 'big')
                 # Calculate header length.
-                b2, b1, b0 = list(msg_len)
-                payload_len = (b2 << 16) | (b1 << 8) | b0
-                if payload_len > max_payload:
+                if not (0 < payload_len <= MAX_PAYLOAD):
                     break
-                recvdata = recvall(client, payload_len, max_payload)
+                recvdata = recvall(client, payload_len, MAX_PAYLOAD)
                 if recvdata is None:
                     break
                 try:
@@ -263,7 +259,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             traceback.print_exc()
         except (socket.timeout,):  # This will happen alot. Don't care
             pass
-        except Exception as e:  # Just to log if any less important exceptions such as socket.timeout
+        except Exception as e:  # Just to log if any less important exceptions are raised
             print(e, file=sys.stderr)
         finally:
             try:
@@ -273,7 +269,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     import socket
     from zlib import decompress, compress
-    max_payload = 2048
+    MAX_PAYLOAD = 2048
 
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         socket.setdefaulttimeout(2) # For ssl handshake and auth.

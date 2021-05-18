@@ -140,23 +140,21 @@ async def socket_send_data(tmpdata, last_update):
         try:
             # Send credentials, login and token.
             login_cred = BDEV_NAME + b'\n' + BTOKEN
-            writer.write(bytes((len(login_cred),)) + login_cred)
+            writer.write(len(login_cred).to_bytes(1, 'big') + login_cred)
             await writer.drain()
             # If server doesn't reply with ok something has gone wrong. Otherwise just loop until
             # connection fails. Then an exception is thrown and function terminates.
-            result = await asyncio.wait_for(reader.readexactly(OK), timeout=10) == b"OK"
+            result = await asyncio.wait_for(reader.readexactly(OK), timeout=5) == b"OK"
             if not result:
                 return
             writer.write(b"P")
             await writer.drain()
-            result = await asyncio.wait_for(reader.readexactly(OK), timeout=10) == b"OK"
+            result = await asyncio.wait_for(reader.readexactly(OK), timeout=5) == b"OK"
             while result:
-                bdata = compress(
+                payload = compress(
                     jsondumps({dev: (last_update[dev], val) for dev, val in tmpdata.items()}).encode()
                 )
-                # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
-                dlen = len(bdata)
-                writer.write(bytes(((dlen >> 16) & 255, (dlen >> 8) & 255, dlen & 255)) + bdata)
+                writer.write(len(payload).to_bytes(3, 'big') + payload)
                 await writer.drain()
                 await asyncio.sleep(10)
         except:
@@ -170,7 +168,7 @@ async def socket_send_data(tmpdata, last_update):
 
     while 1:
         try:
-            task = asyncio.open_connection(MAIN_ADDR, S_PORT, ssl_handshake_timeout=10, ssl=stdssl)
+            task = asyncio.open_connection(MAIN_ADDR, S_PORT, ssl_handshake_timeout=2, ssl=stdssl)
             reader, writer = await asyncio.wait_for(task, timeout=10)
             await client(reader, writer)
         except:
