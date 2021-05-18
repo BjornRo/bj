@@ -139,7 +139,8 @@ async def socket_send_data(tmpdata, last_update):
     async def client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             # Send credentials, login and token.
-            writer.write(BDEV_NAME + b'\n' + BTOKEN + b'\r\n')
+            login_cred = BDEV_NAME + b'\n' + BTOKEN
+            writer.write(bytes((len(login_cred),)) + login_cred)
             await writer.drain()
             # If server doesn't reply with ok something has gone wrong. Otherwise just loop until
             # connection fails. Then an exception is thrown and function terminates.
@@ -155,7 +156,7 @@ async def socket_send_data(tmpdata, last_update):
                 )
                 # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
                 dlen = len(bdata)
-                writer.write(bytearray(((dlen >> 16) & 255, (dlen >> 8) & 255, dlen & 255)) + bdata)
+                writer.write(bytes(((dlen >> 16) & 255, (dlen >> 8) & 255, dlen & 255)) + bdata)
                 await writer.drain()
                 await asyncio.sleep(10)
         except:

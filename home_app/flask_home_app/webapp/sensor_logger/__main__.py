@@ -199,19 +199,9 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             remaining -= len(received)
         return b''.join(received_chunks)
 
-    def first_package_and_validate(client, user_pw_total_length):
-        data = b''
-        buf_size = user_pw_total_length
-        remaining = buf_size
-        while 1:
-            data += client.recv(remaining)
-            if data.endswith(b'\r\n'):
-                break
-            elif not data or remaining <= 0:
-                return None
-            remaining -= len(data)
-        try:
-            device_name, passw = data.splitlines()
+    def parse_validate(data: bytes):
+        try: # dataform: b"login\npassw", data may be None -> Abuse try except...
+            device_name, passw = data.split(b'\n', 2) # Malformed if 2 splits.
             device_name = device_name.decode()
             if checkpw(passw, device_login[device_name]):
                 return device_name
@@ -222,9 +212,8 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     def client_handler(client: ssl.SSLSocket):
         # No need for contex-manager due to always trying to close conn at the end.
-        try:
-            # Get device name, passw. Send devicename and password in one. login \n passw \r\n
-            device_name = first_package_and_validate(client, 128)
+        try: # First byte msg len => read rest of msg => parse and validate.
+            device_name = parse_validate(recvall(client, ord(client.recv(1))))
             if device_name is None:
                 return
             client.send(b"OK")
@@ -253,13 +242,13 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
                 # b0 = (1_000_000 & 0xff)
                 # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
                 # b2, b1, b0 = list(bytearr) =>
-                # len = b2 << 16 | b1 << 8 | b0
-                header = recvall(client, 3, 3)
-                if not header:
+                # len = (b2 << 16) | (b1 << 8) | b0
+                msg_len = recvall(client, 3, 3)
+                if not msg_len:
                     break
                 # Calculate header length.
-                b2, b1, b0 = list(header)
-                payload_len = b2 << 16 | b1 << 8 | b0
+                b2, b1, b0 = list(msg_len)
+                payload_len = (b2 << 16) | (b1 << 8) | b0
                 if payload_len > max_payload:
                     break
                 recvdata = recvall(client, payload_len, max_payload)
