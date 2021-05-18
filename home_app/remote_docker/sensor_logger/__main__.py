@@ -13,6 +13,7 @@ from zlib import compress, decompress
 import tarfile
 from io import BytesIO
 import ssl
+import sys
 
 import asyncio
 from asyncio_mqtt import Client
@@ -243,13 +244,13 @@ async def reload_ssl(seconds=86400):
 
 async def get_data_selector(method_name: str):
     if method_name == "F":
-        return await get_update_data(0, get_filebytes, DB_FILEPATH, DB_FILE)
+        return await _get_update_data(0, _get_filebytes, DB_FILEPATH, DB_FILE)
     if method_name == "Q":
-        return await get_update_data(1, get_db_data)
+        return await _get_update_data(1, _get_db_data)
     return None
 
 
-async def get_update_data(index, f, *args):
+async def _get_update_data(index, f, *args):
     time_now = datetime.now()
     if last_request[index] < time_now:
         last_request[index] = time_now + timedelta(minutes=QUERY_DELTA_MIN)
@@ -264,13 +265,13 @@ async def get_update_data(index, f, *args):
 #     return boolean
 
 
-async def get_db_data():
+async def _get_db_data():
     async with dbconnect(DB_FILEPATH) as db:
         async with db.execute(DB_QUERY) as c:
             return compress(jsondumps((DB_COLUMNS, await c.fetchall())).encode(), 9)
 
 
-async def get_filebytes(filepath, filename):
+async def _get_filebytes(filepath, filename):
     async with async_open(filepath, "rb") as f:
         source = BytesIO(await f.read())
     tardb = BytesIO()
@@ -357,6 +358,7 @@ async def querydb(tmpdata: dict, new_values: dict):
         await asyncio.sleep((nt - dt).total_seconds())
         # If timer gone too fast and there are seconds left, wait the remaining time, else continue.
         if (remain := (nt - datetime.now()).total_seconds()) > 0:
+            print("DB-timer gone too fast", file=sys.stderr) # Maybe too careful. Lets log it and see!
             await asyncio.sleep(remain)
         if not any(new_values.values()):
             continue

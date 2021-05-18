@@ -202,7 +202,8 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     def parse_validate(data: bytes):
         try: # dataform: b"login\npassw", data may be None -> Abuse try except...
-            device_name, passw = data.split(b'\n', 2) # Malformed if 2 splits.
+            # Malformed if 2 splits. Faster to raise except than test pw.
+            device_name, passw = data.split(b'\n', 2)
             device_name = device_name.decode()
             if checkpw(passw, device_login[device_name]):
                 return device_name
@@ -235,14 +236,15 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # While connection is alive, send data. If connection is lost, then an
             # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
-                # Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
-                # Three first bytes, \x--\x--\-- to represent length of the payload.
-                # b2 = (1_000_000 >> 16) & 0xff
-                # b1 = (1_000_000 >> 8) & 0xff
-                # b0 = (1_000_000 & 0xff)
-                # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
-                # b2, b1, b0 = list(bytearr) =>
-                # len = (b2 << 16) | (b1 << 8) | b0 --# Old algo
+                """
+                    Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
+                    Three first bytes, \x--\x--\-- to represent length of the payload.
+                    b2 = (1_000_000 >> 16) & 0xff
+                    b1 = (1_000_000 >> 8) & 0xff
+                    b0 = (1_000_000 & 0xff)
+                    bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
+                    b2, b1, b0 = list(bytearr) =>
+                    len = (b2 << 16) | (b1 << 8) | b0 --# Old algo"""
                 payload_len = int.from_bytes(recvall(client, 3, 3), 'big')
                 # Calculate header length.
                 if not (0 < payload_len <= MAX_PAYLOAD):
