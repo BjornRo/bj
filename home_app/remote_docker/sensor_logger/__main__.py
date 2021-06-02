@@ -220,7 +220,7 @@ async def socket_server(tmpdata_last_update):
                 elif command == b"F":
                     data = DB_FILE.encode() + b"\n" + await get_data_selector("F")
                 if data is not None:
-                    writer.write(data)
+                    writer.write(len(data).to_bytes(3, 'big') + data)
                     await writer.drain()
         except:
             pass

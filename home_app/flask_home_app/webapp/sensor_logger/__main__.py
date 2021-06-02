@@ -44,6 +44,7 @@ TOKEN = CFG["TOKEN"]["token"]
 
 # Socket info constants.
 COMMAND_LEN = 1
+MAX_PAYLOAD_SOCKET = 2048
 #DEV_NAME_LEN = int(CFG["TOKEN"]["dev_name_len"])
 
 # Socket setup
@@ -195,7 +196,7 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
         while remaining > 0:
             received = client.recv(min(remaining, buf_size))
             if not received:
-                return None
+                return b''
             received_chunks.append(received)
             remaining -= len(received)
         return b''.join(received_chunks)
@@ -236,21 +237,20 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
             # While connection is alive, send data. If connection is lost, then an
             # exception may be thrown and the while loop exits, and thread is destroyed.
             while 1:
-                """
-                    Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
-                    Three first bytes, \x--\x--\-- to represent length of the payload.
-                    b2 = (1_000_000 >> 16) & 0xff
-                    b1 = (1_000_000 >> 8) & 0xff
-                    b0 = (1_000_000 & 0xff)
-                    bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
-                    b2, b1, b0 = list(bytearr) =>
-                    len = (b2 << 16) | (b1 << 8) | b0 --# Old algo"""
+                # Datastructure: {"key": ["time", {data}]} || {"key": ["time", [data]]} || [["key", ["time", [data]]], ...]
+                # Three first bytes, \x--\x--\-- to represent length of the payload.
+                # b2 = (1_000_000 >> 16) & 0xff
+                # b1 = (1_000_000 >> 8) & 0xff
+                # b0 = (1_000_000 & 0xff)
+                # bytearray([(payload_len >> 16) & 0xff, (payload_len >> 8) & 0xff, (payload_len & 0xff)])
+                # b2, b1, b0 = list(bytearr) =>
+                # len = (b2 << 16) | (b1 << 8) | b0 --# Old algo
                 payload_len = int.from_bytes(recvall(client, 3, 3), 'big')
                 # Calculate header length.
-                if not (0 < payload_len <= MAX_PAYLOAD):
+                if not (0 < payload_len <= MAX_PAYLOAD_SOCKET):
                     break
-                recvdata = recvall(client, payload_len, MAX_PAYLOAD)
-                if recvdata is None:
+                recvdata = recvall(client, payload_len, MAX_PAYLOAD_SOCKET)
+                if not recvdata:
                     break
                 try:
                     recvdata = decompress(recvdata)
@@ -271,7 +271,6 @@ def data_socket(main_node_data, main_node_new_values, device_login, mc_local, lo
 
     import socket
     from zlib import decompress, compress
-    MAX_PAYLOAD = 2048
 
     with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as srv:
         socket.setdefaulttimeout(2) # For ssl handshake and auth.
